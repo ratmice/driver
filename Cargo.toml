@@ -1,0 +1,11 @@
+[package]
+name = "driver"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[features]
+"_unstable_api" = []
+"_unsealed_unstable_traits" = ["_unstable_api"]
+
+[dependencies]
