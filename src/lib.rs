@@ -65,10 +65,16 @@ impl<X: Tool> Diagnostics<X> for SimpleDiagnostics<X> {
     fn warning(&mut self, w: X::Warning) {
         self.warnings.push(w);
     }
-    fn no_more_data(&mut self) {}
+    fn no_more_data(&mut self) {
+        println!("no_more_data");
+    }
 }
 
-struct DiagnosticsObserver<'a, X, R> {
+struct DiagnosticsObserver<'a, X, R>
+where
+    X: Tool,
+    R: Diagnostics<X>,
+{
     observed_warning: bool,
     observed_error: bool,
     report: &'a mut R,
@@ -106,6 +112,12 @@ where
     }
     pub fn observed_warning(&self) -> bool {
         self.observed_warning
+    }
+}
+
+impl<X: Tool, R: Diagnostics<X>> Drop for DiagnosticsObserver<'_, X, R> {
+    fn drop(&mut self) {
+        self.report.no_more_data()
     }
 }
 
@@ -163,7 +175,12 @@ pub trait Spanned: fmt::Display {
 pub trait Diagnostics<X: Tool> {
     fn error(&mut self, error: X::Error);
     fn warning(&mut self, warning: X::Warning);
-    fn no_more_data(&mut self);
+    // Is called automatically if this report is the main Diagnostics
+    // From a `DiagnosticsObserver` If this report has children,
+    // it will need to propagate the call. Should only be called once.
+    //
+    // Default implementation does nothing.
+    fn no_more_data(&mut self) {}
 }
 pub struct Options<Required, Optional> {
     pub required: Required,
