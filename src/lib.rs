@@ -53,7 +53,6 @@ where
 ///
 /// There may be some form of `DriverOptions` which we do want to provide
 /// Presumably they can be obtained through a `DriverControl`.
-
 pub struct DriverConfig<'a, X: Tool> {
     /// This is mostly here to guide inference, and generally would be a unitary type.
     pub tool: X,
@@ -68,30 +67,42 @@ pub struct DriverConfig<'a, X: Tool> {
     pub options: Options<X::RequiredArgs<'a>, X::OptionalArgs>,
 }
 
+/// This type is owned by driver, but may contain references which outlive it.
 pub struct DriverControl<'a, X: Tool, R: Diagnostics<X>> {
     report_observer: DiagnosticsObserver<'a, X, R>,
 }
 
-/// An environment from which a driver can build a `DriverControl`
-pub struct DriverEnv<'a, X, R>
+/// Used to build a `DriverControl`, and may contain trait implementations
+/// specified by the caller.  Currently this is not very future-proof.
+pub struct DriverEnv<'a, X, Caller>
 where
     X: Tool,
-    R: Diagnostics<X>,
+    Caller: CallerSpec<X>,
 {
     tool: X,
-    report: &'a mut R,
+    diagnostics: &'a mut Caller::Diagnostics,
+}
+
+/// Provided by the
+pub trait CallerSpec<X: Tool> {
+    type Diagnostics: Diagnostics<X>;
+}
+
+pub struct SimpleSpec;
+impl<X: Tool> CallerSpec<X> for SimpleSpec {
+    type Diagnostics = SimpleDiagnostics<X>;
 }
 
 impl<'a, X: Tool> DriverConfig<'a, X> {
     /// Builds a DriverControl, calling `build_with_driver_ctl`.
     /// to return a tool specific `Output` type.
-    pub fn run_driver<'b: 'a, R: Diagnostics<X>>(
+    pub fn run_driver<'b: 'a, C: CallerSpec<X>>(
         self,
-        driver_ctl: DriverEnv<'b, X, R>,
+        driver_ctl: DriverEnv<'b, X, SimpleSpec>,
     ) -> X::Output<'a>
 where {
         let driver_env = DriverControl {
-            report_observer: DiagnosticsObserver::new(self.tool, driver_ctl.report),
+            report_observer: DiagnosticsObserver::new(self.tool, driver_ctl.diagnostics),
         };
         X::Output::build_with_driver_ctl(self.options, driver_env)
     }
@@ -157,13 +168,13 @@ pub struct DriverOptionalArgs {
 
 /// A Simple implementation of a `Diagnostics` trait.
 /// This was previously called a `Report`.
-struct SimpleDiagnostics<X: Tool> {
+pub struct SimpleDiagnostics<X: Tool> {
     warnings: Vec<X::Warning>,
     errors: Vec<X::Error>,
 }
 
-impl<X: Tool> SimpleDiagnostics<X> {
-    pub fn new() -> Self {
+impl<X: Tool> Default for SimpleDiagnostics<X> {
+    fn default() -> Self {
         Self {
             warnings: vec![],
             errors: vec![],
@@ -373,10 +384,10 @@ mod tests {
 
     #[test]
     fn it_works() -> Result<(), ConcreteDriverError> {
-        let mut report = SimpleDiagnostics::new();
-        let driver_ctl = DriverEnv {
+        let mut diagnostics = SimpleDiagnostics::default();
+        let driver_env = DriverEnv {
             tool: Yacc,
-            report: &mut report,
+            diagnostics: &mut diagnostics,
         };
         // Just pass in `Yacc` to avoid DriverConfig::<Yacc>`.
         let driver = DriverConfig {
@@ -391,7 +402,7 @@ mod tests {
             )
                 .into(),
         }
-        .run_driver(driver_ctl);
+        .run_driver::<SimpleSpec>(driver_env);
         let _ast = driver.ast();
         let _grm = driver.grammar()?;
         Ok(())
@@ -400,10 +411,10 @@ mod tests {
     #[should_panic]
     #[test]
     fn it_fails() {
-        let mut report = SimpleDiagnostics::new();
+        let mut diagnostics = SimpleDiagnostics::default();
         let driver_ctl = DriverEnv {
             tool: Yacc,
-            report: &mut report,
+            diagnostics: &mut diagnostics,
         };
         // Just pass in `Yacc` to avoid DriverConfig::<Yacc>`.
         let driver = DriverConfig {
@@ -418,7 +429,7 @@ mod tests {
             )
                 .into(),
         }
-        .run_driver(driver_ctl);
+        .run_driver::<SimpleSpec>(driver_ctl);
         let _ast = driver.ast();
         let _grm = driver.grammar().unwrap();
     }
