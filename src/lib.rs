@@ -13,60 +13,70 @@ pub trait Tool
 where
     Self: Sized + Copy,
 {
+    /// The type of errors specific to a tool.
     type Error: error::Error + Spanned;
+    /// The type of warnings specific to a tool.
     type Warning: Spanned;
-    type Output<'a>: BuildWithDriverEnv<'a, Self>;
+    /// The type output by the tool.
+    type Output<'a>: OutputWithDriverControl<'a, Self>;
+    /// A tool specific type for arguments must be given.
     type RequiredArgs<'a>;
+    /// A tool specific type for arguments which derive `Default`
     type OptionalArgs: Default;
 }
 
-pub trait BuildWithDriverEnv<'a, T>
+/// A `DriverControl`, is built from a `DriverEnv`.
+/// Which then gets built within `run_driver`.
+///
+/// `DriverControl`, just provides functions which the
+/// implementer may call to interact with a driver,
+/// such as a `DiagnosticsObserver`.
+pub trait OutputWithDriverControl<'a, T>
 where
     T: Tool,
 {
-    fn build_with_driver_env<R: Diagnostics<T>>(
+    fn build_with_driver_ctl<D: Diagnostics<T>>(
         config: DriverConfig<'a, T>,
-        control: DriverEnv<'_, T, R>,
+        control: DriverControl<'_, T, D>,
     ) -> T::Output<'a>;
 }
 
+/// `DriverConfig` gets passed in from within `run_driver`.
+/// and provded to the implementation of `BuildWithDriverControl`.
 pub struct DriverConfig<'a, X: Tool> {
+    // This is mostly here to guide inference, and generally would be a unitary type.
     pub tool: X,
+    // A concrete set of options common to all driver instances
     pub driver_options: Options<DriverOptions, DriverOptionalArgs>,
     pub options: Options<X::RequiredArgs<'a>, X::OptionalArgs>,
 }
 
-pub struct DriverEnv<'a, X: Tool, R: Diagnostics<X>> {
+pub struct DriverControl<'a, X: Tool, R: Diagnostics<X>> {
     report_observer: DiagnosticsObserver<'a, X, R>,
 }
 
-pub struct DriverOptions {
-    pub foo: (),
+/// An environment from which a driver can build a `DriverControl`
+pub struct DriverEnv<'a, X, R>
+where
+    X: Tool,
+    R: Diagnostics<X>,
+{
+    tool: X,
+    report: &'a mut R,
 }
 
-struct SimpleDiagnostics<X: Tool> {
-    warnings: Vec<X::Warning>,
-    errors: Vec<X::Error>,
-}
-
-impl<X: Tool> SimpleDiagnostics<X> {
-    pub fn new() -> Self {
-        Self {
-            warnings: vec![],
-            errors: vec![],
-        }
-    }
-}
-
-impl<X: Tool> Diagnostics<X> for SimpleDiagnostics<X> {
-    fn error(&mut self, e: X::Error) {
-        self.errors.push(e);
-    }
-    fn warning(&mut self, w: X::Warning) {
-        self.warnings.push(w);
-    }
-    fn no_more_data(&mut self) {
-        println!("no_more_data");
+impl<'a, X: Tool> DriverConfig<'a, X> {
+    /// Builds a DriverControl, calling `build_with_driver_ctl`.
+    /// to return a tool specific `Output` type.
+    pub fn run_driver<'b: 'a, R: Diagnostics<X>>(
+        self,
+        driver_ctl: DriverEnv<'b, X, R>,
+    ) -> X::Output<'a>
+where {
+        let driver_env = DriverControl {
+            report_observer: DiagnosticsObserver::new(self.tool, driver_ctl.report),
+        };
+        X::Output::build_with_driver_ctl(self, driver_env)
     }
 }
 
@@ -115,38 +125,55 @@ where
     }
 }
 
-impl<X: Tool, R: Diagnostics<X>> Drop for DiagnosticsObserver<'_, X, R> {
-    fn drop(&mut self) {
-        self.report.no_more_data()
-    }
-}
-
-pub struct DriverControl<'a, X, R>
-where
-    X: Tool,
-    R: Diagnostics<X>,
-{
-    tool: X,
-    report: &'a mut R,
+/// Required options that are common to all drivers.
+pub struct DriverOptions {
+    pub foo: (),
 }
 
 #[derive(Default)]
+/// Optional arguments common to all drivers.
 pub struct DriverOptionalArgs {
     // For future use.
     #[doc(hidden)]
     _non_exhaustive: _unstable_api_::InternalDefault,
 }
 
-impl<'a, X: Tool> DriverConfig<'a, X> {
-    pub fn run_driver<'b: 'a, R: Diagnostics<X>>(
-        self,
-        driver_ctl: DriverControl<'b, X, R>,
-    ) -> X::Output<'a>
-where {
-        let driver_env = DriverEnv {
-            report_observer: DiagnosticsObserver::new(self.tool, driver_ctl.report),
-        };
-        X::Output::build_with_driver_env(self, driver_env)
+/// A Simple implementation of a `Diagnostics` trait.
+/// This was previously called a `Report`.
+struct SimpleDiagnostics<X: Tool> {
+    warnings: Vec<X::Warning>,
+    errors: Vec<X::Error>,
+}
+
+impl<X: Tool> SimpleDiagnostics<X> {
+    pub fn new() -> Self {
+        Self {
+            warnings: vec![],
+            errors: vec![],
+        }
+    }
+}
+
+impl<X: Tool> Diagnostics<X> for SimpleDiagnostics<X> {
+    /// Indicatation that an error has occurred and the
+    /// `Diagnostics` should take ownership.
+    fn error(&mut self, e: X::Error) {
+        self.errors.push(e);
+    }
+    /// Indicatation that a `warning` has occurred and the
+    /// `Diagnostics` should take ownership of it.
+    fn warning(&mut self, w: X::Warning) {
+        self.warnings.push(w);
+    }
+    /// Called by the `DiagnosticsObserver` drop handler.
+    fn no_more_data(&mut self) {
+        println!("no_more_data");
+    }
+}
+
+impl<X: Tool, R: Diagnostics<X>> Drop for DiagnosticsObserver<'_, X, R> {
+    fn drop(&mut self) {
+        self.report.no_more_data()
     }
 }
 
@@ -182,6 +209,8 @@ pub trait Diagnostics<X: Tool> {
     // Default implementation does nothing.
     fn no_more_data(&mut self) {}
 }
+
+/// A pair of required and optional fields.
 pub struct Options<Required, Optional> {
     pub required: Required,
     pub optional: Optional,
@@ -300,13 +329,13 @@ mod tests {
         }
     }
 
-    impl<'a> BuildWithDriverEnv<'a, Yacc> for GrammarASTWithValidationCertificate
+    impl<'a> OutputWithDriverControl<'a, Yacc> for GrammarASTWithValidationCertificate
     where
         Self: 'a,
     {
-        fn build_with_driver_env<R: Diagnostics<Yacc>>(
+        fn build_with_driver_ctl<R: Diagnostics<Yacc>>(
             config: DriverConfig<'a, Yacc>,
-            mut ctl: DriverEnv<Yacc, R>,
+            mut ctl: DriverControl<Yacc, R>,
         ) -> GrammarASTWithValidationCertificate {
             #![allow(clippy::unit_cmp)]
             if config.options.required.source == "invalid sources" {
@@ -330,7 +359,7 @@ mod tests {
     #[test]
     fn it_works() -> Result<(), ConcreteDriverError> {
         let mut report = SimpleDiagnostics::new();
-        let driver_ctl = DriverControl {
+        let driver_ctl = DriverEnv {
             tool: Yacc,
             report: &mut report,
         };
@@ -358,7 +387,7 @@ mod tests {
     #[test]
     fn it_fails() {
         let mut report = SimpleDiagnostics::new();
-        let driver_ctl = DriverControl {
+        let driver_ctl = DriverEnv {
             tool: Yacc,
             report: &mut report,
         };
