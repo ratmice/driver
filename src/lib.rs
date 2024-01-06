@@ -180,18 +180,18 @@ where
             tool,
         }
     }
-    pub fn error(&mut self, e: X::Error) -> Result<(), DriverToolError> {
+    pub fn emit_error(&mut self, e: X::Error) -> Result<(), DriverToolError> {
         self.observed_error = true;
-        self.diagnostics.error(e);
+        self.diagnostics.emit_error(e);
         Err(DriverToolError::ToolFailure)
     }
-    pub fn non_fatal_error(&mut self, e: X::Error) {
+    pub fn emit_non_fatal_error(&mut self, e: X::Error) {
         self.observed_error = true;
-        self.diagnostics.error(e);
+        self.diagnostics.emit_error(e);
     }
-    pub fn warning(&mut self, w: X::Warning) {
+    pub fn emit_warning(&mut self, w: X::Warning) {
         self.observed_warning = true;
-        self.diagnostics.warning(w);
+        self.diagnostics.emit_warning(w);
     }
     pub fn observed_error(&self) -> bool {
         self.observed_error
@@ -240,12 +240,12 @@ impl<X: Tool> Default for SimpleDiagnostics<X> {
 impl<X: Tool> Diagnostics<X> for SimpleDiagnostics<X> {
     /// Indicatation that an error has occurred and the
     /// `Diagnostics` should take ownership.
-    fn error(&mut self, e: X::Error) {
+    fn emit_error(&mut self, e: X::Error) {
         self.errors.push(e);
     }
     /// Indicatation that a `warning` has occurred and the
     /// `Diagnostics` should take ownership of it.
-    fn warning(&mut self, w: X::Warning) {
+    fn emit_warning(&mut self, w: X::Warning) {
         self.warnings.push(w);
     }
     /// Called by the `DiagnosticsEmitter` drop handler.
@@ -317,14 +317,11 @@ pub trait Spanned: fmt::Display {
 }
 
 pub trait Diagnostics<X: Tool> {
-    fn error(&mut self, error: X::Error);
-    fn warning(&mut self, warning: X::Warning);
-    // Is called automatically if this report is the main Diagnostics
-    // From a `DiagnosticsEmitter` If this report has children,
-    // it will need to propagate the call. Should only be called once.
-    //
-    // Default implementation does nothing.
-    fn no_more_data(&mut self) {}
+    fn emit_error(&mut self, error: X::Error);
+    fn emit_warning(&mut self, warning: X::Warning);
+    /// Is called from `DiagnosticsEmitter::drop` To the top-level
+    /// diagnostics value. Receivers may need to propagate it.
+    fn no_more_data(&mut self);
 }
 
 /// A pair of required and optional fields.
@@ -461,7 +458,7 @@ mod tests {
             ) = ctl.take_owned();
             if let Some((_, source)) = ctl.sources().next() {
                 if !source.is_empty() {
-                    emitter.non_fatal_error(YaccGrammarError::Testing(vec![]));
+                    emitter.emit_non_fatal_error(YaccGrammarError::Testing(vec![]));
                 }
             }
             println!("{:?}", options.required.yacc_kind,);
