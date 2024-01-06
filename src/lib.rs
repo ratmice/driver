@@ -31,22 +31,39 @@ where
 /// `DriverControl`, just provides functions which the
 /// implementer may call to interact with a driver,
 /// such as a `DiagnosticsObserver`.
+///
+/// In the future there is some thoughts, that the `DriverControl`,
+/// Can also eventually handle things filesystem interaction
+/// presenting a tool with an `&str` without having
+/// to concern itself with how it arrives.  Whether from
+/// a `Path`, or a string passed in by the user.
 pub trait OutputWithDriverControl<'a, T>
 where
     T: Tool,
 {
     fn build_with_driver_ctl<D: Diagnostics<T>>(
-        config: DriverConfig<'a, T>,
+        config: Options<T::RequiredArgs<'a>, T::OptionalArgs>,
         control: DriverControl<'_, T, D>,
     ) -> T::Output<'a>;
 }
 
-/// `DriverConfig` gets passed in from within `run_driver`.
-/// and provded to the implementation of `BuildWithDriverControl`.
+/// `DriverConfig` gets passed in from within `run_driver`,
+/// provded to the implementation of `BuildWithDriverControl`.
+/// While `DriverOptions` are *not* passed in, and reserved for the driver.
+///
+/// There may be some form of `DriverOptions` which we do want to provide
+/// Presumably they can be obtained through a `DriverControl`.
+
 pub struct DriverConfig<'a, X: Tool> {
-    // This is mostly here to guide inference, and generally would be a unitary type.
+    /// This is mostly here to guide inference, and generally would be a unitary type.
     pub tool: X,
-    // A concrete set of options common to all driver instances
+    /// Options which are specific to the driver and kept hidden
+    /// from the tool. For instance whether warnings are errors.
+    /// Since `tools` route errors through the driver, tools should
+    /// not concern themselves with it.
+    ///
+    /// Similarly if we implement `Path`/source providing in the driver.
+    /// Tools should also probably not concern themselves with that.
     pub driver_options: Options<DriverOptions, DriverOptionalArgs>,
     pub options: Options<X::RequiredArgs<'a>, X::OptionalArgs>,
 }
@@ -76,7 +93,7 @@ where {
         let driver_env = DriverControl {
             report_observer: DiagnosticsObserver::new(self.tool, driver_ctl.report),
         };
-        X::Output::build_with_driver_ctl(self, driver_env)
+        X::Output::build_with_driver_ctl(self.options, driver_env)
     }
 }
 
@@ -334,19 +351,17 @@ mod tests {
         Self: 'a,
     {
         fn build_with_driver_ctl<R: Diagnostics<Yacc>>(
-            config: DriverConfig<'a, Yacc>,
+            options: Options<<Yacc as Tool>::RequiredArgs<'a>, <Yacc as Tool>::OptionalArgs>,
             mut ctl: DriverControl<Yacc, R>,
         ) -> GrammarASTWithValidationCertificate {
             #![allow(clippy::unit_cmp)]
-            if config.options.required.source == "invalid sources" {
+            if options.required.source == "invalid sources" {
                 ctl.report_observer
                     .non_fatal_error(YaccGrammarError::Testing(vec![]));
             }
             println!(
-                "{}{}{:?}",
-                config.driver_options.required.foo == (),
-                config.options.required.source,
-                config.options.required.yacc_kind,
+                "{}{:?}",
+                options.required.source, options.required.yacc_kind,
             );
             // now at some time in the future.
             GrammarASTWithValidationCertificate {
@@ -378,7 +393,6 @@ mod tests {
         }
         .run_driver(driver_ctl);
         let _ast = driver.ast();
-
         let _grm = driver.grammar()?;
         Ok(())
     }
