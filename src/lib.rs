@@ -74,13 +74,14 @@ pub struct DriverControl<'a, X: Tool, R: Diagnostics<X>> {
 
 /// Used to build a `DriverControl`, and may contain trait implementations
 /// specified by the caller.  Currently this is not very future-proof.
-pub struct DriverEnv<'a, X, Caller>
+pub struct DriverEnv<'a, X, C>
 where
     X: Tool,
-    Caller: CallerSpec<X>,
+    C: CallerSpec<X>,
 {
     tool: X,
-    diagnostics: &'a mut Caller::Diagnostics,
+    caller_spec: C,
+    diagnostics: &'a mut C::Diagnostics,
 }
 
 /// Provided by the
@@ -387,6 +388,7 @@ mod tests {
         let mut diagnostics = SimpleDiagnostics::default();
         let driver_env = DriverEnv {
             tool: Yacc,
+            caller_spec: SimpleSpec,
             diagnostics: &mut diagnostics,
         };
         // Just pass in `Yacc` to avoid DriverConfig::<Yacc>`.
@@ -414,6 +416,7 @@ mod tests {
         let mut diagnostics = SimpleDiagnostics::default();
         let driver_ctl = DriverEnv {
             tool: Yacc,
+            caller_spec: SimpleSpec,
             diagnostics: &mut diagnostics,
         };
         // Just pass in `Yacc` to avoid DriverConfig::<Yacc>`.
