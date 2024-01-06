@@ -79,9 +79,12 @@ pub struct DriverControl<'a, X: Tool, D: Diagnostics<X>> {
     fscache: &'a mut HashMap<SourceId, (Cow<'a, path::Path>, String)>,
 }
 
+/// Returned by `DriverControl::take_owned`
 pub struct DriverControlOwned<'a, X: Tool, D: Diagnostics<X>> {
     pub diagnostics_observer: DiagnosticsObserver<'a, X, D>,
 }
+
+/// Returned by `DriverControl::take_owned`
 pub struct DriverControlBorrowed<'a> {
     fscache: &'a mut HashMap<SourceId, (Cow<'a, path::Path>, String)>,
 }
@@ -99,16 +102,18 @@ where
     fscache: &'a mut HashMap<SourceId, (Cow<'a, path::Path>, String)>,
 }
 
-/// Provided by the
+/// Associated types provided by the caller.
 pub trait CallerSpec<X: Tool> {
     type Diagnostics: Diagnostics<X>;
 }
 
+/// An impl of CallerSpec that can be used with SimpleDiagnostics.
 pub struct SimpleSpec;
 impl<X: Tool> CallerSpec<X> for SimpleSpec {
     type Diagnostics = SimpleDiagnostics<X>;
 }
 
+/// Errors occurred by the driver.
 #[derive(thiserror::Error, Debug)]
 pub enum DriverError {
     #[error("Io error {0} ")]
@@ -145,6 +150,8 @@ where {
     }
 }
 
+/// This can be used to send ownership of diagnostic errors and warnings.
+/// but retain knowledge of errors or warnings having occurred.
 pub struct DiagnosticsObserver<'a, X, R>
 where
     X: Tool,
@@ -273,6 +280,7 @@ impl<'a> DriverControlBorrowed<'a> {
 /// * A SourceID refers uniquely to a single source string.
 pub struct SourceId(usize);
 
+/// Errors have been emitted by the tool, that were observed by the driver.
 #[derive(Debug)]
 pub enum DriverToolError {
     ToolFailure,
