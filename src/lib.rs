@@ -3,7 +3,7 @@
 
 /// I don't know how I feel about this, but it works.
 use std::io::Read as _;
-use std::{borrow::Cow, cell::Cell, collections::HashMap};
+use std::{borrow::Cow, collections::HashMap};
 
 use std::{error, fmt, io, path};
 
@@ -71,8 +71,15 @@ pub struct DriverConfig<'a, X: Tool> {
 }
 
 /// This type is owned by driver, but may contain references which outlive it.
-pub struct DriverControl<'a, X: Tool, R: Diagnostics<X>> {
-    diagnostics_observer: Cell<Option<DiagnosticsObserver<'a, X, R>>>,
+pub struct DriverControl<'a, X: Tool, D: Diagnostics<X>> {
+    diagnostics_observer: DiagnosticsObserver<'a, X, D>,
+    fscache: &'a mut HashMap<Cow<'a, path::Path>, String>,
+}
+
+pub struct DriverControlOwned<'a, X: Tool, D: Diagnostics<X>> {
+    pub diagnostics_observer: DiagnosticsObserver<'a, X, D>,
+}
+pub struct DriverControlBorrowed<'a> {
     fscache: &'a mut HashMap<Cow<'a, path::Path>, String>,
 }
 
@@ -121,17 +128,14 @@ where {
             driver_env.fscache.insert(source_path.into(), source);
         }
         let driver_ctl = DriverControl {
-            diagnostics_observer: Cell::new(Some(DiagnosticsObserver::new(
-                self.tool,
-                driver_env.diagnostics,
-            ))),
+            diagnostics_observer: DiagnosticsObserver::new(self.tool, driver_env.diagnostics),
             fscache: driver_env.fscache,
         };
         Ok(X::Output::build_with_driver_ctl(self.options, driver_ctl))
     }
 }
 
-struct DiagnosticsObserver<'a, X, R>
+pub struct DiagnosticsObserver<'a, X, R>
 where
     X: Tool,
     R: Diagnostics<X>,
@@ -230,10 +234,19 @@ impl<X: Tool, R: Diagnostics<X>> Drop for DiagnosticsObserver<'_, X, R> {
 }
 
 impl<'a, 'b: 'a, X: Tool, D: Diagnostics<X>> DriverControl<'a, X, D> {
-    fn take_diagnostics_observer(&self) -> Option<DiagnosticsObserver<X, D>> {
-        self.diagnostics_observer.take()
-    }
+    fn take_owned(self) -> (DriverControlOwned<'a, X, D>, DriverControlBorrowed<'a>) {
+        let owned = DriverControlOwned {
+            diagnostics_observer: self.diagnostics_observer,
+        };
 
+        let borrowed = DriverControlBorrowed {
+            fscache: self.fscache,
+        };
+        (owned, borrowed)
+    }
+}
+
+impl<'a> DriverControlBorrowed<'a> {
     pub fn sources(&self) -> impl Iterator<Item = &str> {
         self.fscache.iter().map(|(path, src)| src.as_str())
     }
@@ -397,7 +410,12 @@ mod tests {
             options: Options<<Yacc as Tool>::RequiredArgs<'a>, <Yacc as Tool>::OptionalArgs>,
             ctl: DriverControl<Yacc, R>,
         ) -> GrammarASTWithValidationCertificate {
-            let mut observer = ctl.take_diagnostics_observer().unwrap();
+            let (
+                DriverControlOwned {
+                    diagnostics_observer: mut observer,
+                },
+                ctl,
+            ) = ctl.take_owned();
             if let Some(source) = ctl.sources().next() {
                 if !source.is_empty() {
                     observer.non_fatal_error(YaccGrammarError::Testing(vec![]));
