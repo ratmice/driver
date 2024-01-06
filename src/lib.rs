@@ -2,7 +2,10 @@
 #![allow(unused_variables)]
 
 /// I don't know how I feel about this, but it works.
-use std::{error, fmt};
+use std::io::Read as _;
+use std::{borrow::Cow, cell::Cell, collections::HashMap};
+
+use std::{error, fmt, io, path};
 
 mod _unstable_api_ {
     #[derive(Default)]
@@ -69,7 +72,8 @@ pub struct DriverConfig<'a, X: Tool> {
 
 /// This type is owned by driver, but may contain references which outlive it.
 pub struct DriverControl<'a, X: Tool, R: Diagnostics<X>> {
-    report_observer: DiagnosticsObserver<'a, X, R>,
+    diagnostics_observer: Cell<Option<DiagnosticsObserver<'a, X, R>>>,
+    fscache: &'a mut HashMap<Cow<'a, path::Path>, String>,
 }
 
 /// Used to build a `DriverControl`, and may contain trait implementations
@@ -82,6 +86,7 @@ where
     tool: X,
 
     diagnostics: &'a mut C::Diagnostics,
+    fscache: &'a mut HashMap<Cow<'a, path::Path>, String>,
 }
 
 /// Provided by the
@@ -94,19 +99,35 @@ impl<X: Tool> CallerSpec<X> for SimpleSpec {
     type Diagnostics = SimpleDiagnostics<X>;
 }
 
+#[derive(thiserror::Error, Debug)]
+pub enum DriverError {
+    #[error("Io error {0} ")]
+    Io(#[from] io::Error),
+}
 impl<'a, X: Tool> DriverConfig<'a, X> {
     /// Builds a DriverControl, calling `build_with_driver_ctl`.
     /// to return a tool specific `Output` type.
     pub fn run_driver<'b: 'a, C: CallerSpec<X>>(
-        self,
-        driver_ctl: DriverEnv<'b, X, SimpleSpec>,
+        mut self,
+        driver_env: DriverEnv<'b, X, SimpleSpec>,
         caller_spec: C,
-    ) -> X::Output<'a>
+    ) -> Result<X::Output<'a>, DriverError>
 where {
-        let driver_env = DriverControl {
-            report_observer: DiagnosticsObserver::new(self.tool, driver_ctl.diagnostics),
+        if let Some(source_path) = self.driver_options.optional.source_path.take() {
+            let dir = cap_std::fs::Dir::open_ambient_dir(".", cap_std::ambient_authority())?;
+            let mut file = dir.open(&source_path)?;
+            let mut source = String::new();
+            file.read_to_string(&mut source)?;
+            driver_env.fscache.insert(source_path.into(), source);
+        }
+        let driver_ctl = DriverControl {
+            diagnostics_observer: Cell::new(Some(DiagnosticsObserver::new(
+                self.tool,
+                driver_env.diagnostics,
+            ))),
+            fscache: driver_env.fscache,
         };
-        X::Output::build_with_driver_ctl(self.options, driver_env)
+        Ok(X::Output::build_with_driver_ctl(self.options, driver_ctl))
     }
 }
 
@@ -134,10 +155,10 @@ where
             tool,
         }
     }
-    pub fn error(&mut self, e: X::Error) -> Result<(), ConcreteDriverError> {
+    pub fn error(&mut self, e: X::Error) -> Result<(), DriverToolError> {
         self.observed_error = true;
         self.report.error(e);
-        Err(ConcreteDriverError::Failure)
+        Err(DriverToolError::ToolFailure)
     }
     pub fn non_fatal_error(&mut self, e: X::Error) {
         self.observed_error = true;
@@ -163,7 +184,8 @@ pub struct DriverOptions {
 #[derive(Default)]
 /// Optional arguments common to all drivers.
 pub struct DriverOptionalArgs {
-    // For future use.
+    // not yet implemented.
+    source_path: Option<path::PathBuf>,
     #[doc(hidden)]
     _non_exhaustive: _unstable_api_::InternalDefault,
 }
@@ -207,11 +229,20 @@ impl<X: Tool, R: Diagnostics<X>> Drop for DiagnosticsObserver<'_, X, R> {
     }
 }
 
-#[derive(Debug)]
-pub enum ConcreteDriverError {
-    Failure,
+impl<'a, 'b: 'a, X: Tool, D: Diagnostics<X>> DriverControl<'a, X, D> {
+    fn take_diagnostics_observer(&self) -> Option<DiagnosticsObserver<X, D>> {
+        self.diagnostics_observer.take()
+    }
+
+    pub fn sources(&self) -> impl Iterator<Item = &str> {
+        self.fscache.iter().map(|(path, src)| src.as_str())
+    }
 }
 
+#[derive(Debug)]
+pub enum DriverToolError {
+    ToolFailure,
+}
 #[derive(Debug)]
 #[allow(dead_code)]
 pub struct Span {
@@ -265,7 +296,7 @@ mod tests {
         type Error = YaccGrammarError;
         type Warning = YaccGrammarWarning;
         type OptionalArgs = YaccGrammarOptArgs;
-        type RequiredArgs<'a> = YaccConfig<'a>;
+        type RequiredArgs<'a> = YaccConfig;
         type Output<'a> = GrammarASTWithValidationCertificate;
     }
 
@@ -283,8 +314,7 @@ mod tests {
         Eco,
     }
 
-    struct YaccConfig<'a> {
-        source: &'a str,
+    struct YaccConfig {
         yacc_kind: YaccKind,
     }
 
@@ -347,11 +377,11 @@ mod tests {
     }
 
     impl GrammarASTWithValidationCertificate {
-        fn grammar(&self) -> Result<YaccGrammar, ConcreteDriverError> {
+        fn grammar(&self) -> Result<YaccGrammar, DriverToolError> {
             if self.validation_success {
                 Ok(YaccGrammar)
             } else {
-                Err(ConcreteDriverError::Failure)
+                Err(DriverToolError::ToolFailure)
             }
         }
         fn ast(&self) -> &GrammarAST {
@@ -365,31 +395,31 @@ mod tests {
     {
         fn build_with_driver_ctl<R: Diagnostics<Yacc>>(
             options: Options<<Yacc as Tool>::RequiredArgs<'a>, <Yacc as Tool>::OptionalArgs>,
-            mut ctl: DriverControl<Yacc, R>,
+            ctl: DriverControl<Yacc, R>,
         ) -> GrammarASTWithValidationCertificate {
-            #![allow(clippy::unit_cmp)]
-            if options.required.source == "invalid sources" {
-                ctl.report_observer
-                    .non_fatal_error(YaccGrammarError::Testing(vec![]));
+            let mut observer = ctl.take_diagnostics_observer().unwrap();
+            if let Some(source) = ctl.sources().next() {
+                if !source.is_empty() {
+                    observer.non_fatal_error(YaccGrammarError::Testing(vec![]));
+                }
             }
-            println!(
-                "{}{:?}",
-                options.required.source, options.required.yacc_kind,
-            );
+            println!("{:?}", options.required.yacc_kind,);
             // now at some time in the future.
             GrammarASTWithValidationCertificate {
                 ast: GrammarAST,
-                validation_success: !ctl.report_observer.observed_error(),
+                validation_success: !observer.observed_error(),
             }
         }
     }
 
     #[test]
-    fn it_works() -> Result<(), ConcreteDriverError> {
+    fn it_works() {
         let mut diagnostics = SimpleDiagnostics::default();
+        let mut fscache = HashMap::new();
         let driver_env = DriverEnv {
             tool: Yacc,
             diagnostics: &mut diagnostics,
+            fscache: &mut fscache,
         };
         // Test that the DriverEnv outlives the driver.
         {
@@ -399,46 +429,56 @@ mod tests {
                 driver_options: (DriverOptions { foo: () }, Default::default()).into(),
                 options: (
                     YaccConfig {
-                        source: "",
                         yacc_kind: YaccKind::Grmtools,
                     },
                     Default::default(),
                 )
                     .into(),
             }
-            .run_driver(driver_env, SimpleSpec);
+            .run_driver(driver_env, SimpleSpec)
+            .unwrap();
             let _ast = driver.ast();
-            let _grm = driver.grammar()?;
+            let _grm = driver.grammar().unwrap();
             #[allow(clippy::drop_non_drop)]
             drop(driver);
         }
-        Ok(())
     }
 
     #[should_panic]
     #[test]
     fn it_fails() {
+        // These fields should perhaps be combined into something?
         let mut diagnostics = SimpleDiagnostics::default();
-        let driver_ctl = DriverEnv {
+        let mut fscache = HashMap::new();
+
+        let driver_env = DriverEnv {
             tool: Yacc,
             diagnostics: &mut diagnostics,
+            fscache: &mut fscache,
         };
         // Test that the DriverEnv outlives the driver.
         {
             // Just pass in `Yacc` to avoid DriverConfig::<Yacc>`.
             let driver = DriverConfig {
                 tool: Yacc,
-                driver_options: (DriverOptions { foo: () }, Default::default()).into(),
+                driver_options: (
+                    DriverOptions { foo: () },
+                    DriverOptionalArgs {
+                        source_path: Some("Cargo.toml".into()),
+                        ..Default::default()
+                    },
+                )
+                    .into(),
                 options: (
                     YaccConfig {
-                        source: "invalid sources",
                         yacc_kind: YaccKind::Grmtools,
                     },
                     Default::default(),
                 )
                     .into(),
             }
-            .run_driver(driver_ctl, SimpleSpec);
+            .run_driver(driver_env, SimpleSpec)
+            .unwrap();
             let _ast = driver.ast();
             let _grm = driver.grammar().unwrap();
             #[allow(clippy::drop_non_drop)]

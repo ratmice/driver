@@ -9,3 +9,5 @@ edition = "2021"
 "_unsealed_unstable_traits" = ["_unstable_api"]
 
 [dependencies]
+cap-std = "2.0.1"
+thiserror = "1.0.56"
