@@ -210,13 +210,13 @@ pub struct DriverOptions {
 /// Optional arguments common to all drivers.
 pub struct DriverOptionalArgs {
     /// Reads a source at the given `path`` relative to the `current_dir()`.
-    source_path: Option<path::PathBuf>,
+    pub source_path: Option<path::PathBuf>,
     /// Uses a given name, and string.
-    source_string: Option<(path::PathBuf, String)>,
+    pub source_string: Option<(path::PathBuf, String)>,
     /// Uses a given name, and the `Stdin`.
     ///
     /// Reads `Stdin` to completion upon driver initialization.
-    source_stdin: Option<(path::PathBuf, std::io::Stdin)>,
+    pub source_stdin: Option<(path::PathBuf, std::io::Stdin)>,
     #[doc(hidden)]
     _non_exhaustive: _unstable_api_::InternalDefault,
 }
