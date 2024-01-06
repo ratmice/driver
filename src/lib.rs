@@ -57,6 +57,8 @@ where
 ///
 /// There may be some form of `DriverOptions` which we do want to provide
 /// Presumably they can be obtained through a `DriverControl`.
+///
+/// Fields are public so that they are constructable by the caller.
 pub struct DriverConfig<'a, X: Tool> {
     /// This is mostly here to guide inference, and generally would be a unitary type.
     pub tool: X,
@@ -242,7 +244,7 @@ impl<X: Tool, R: Diagnostics<X>> Drop for DiagnosticsObserver<'_, X, R> {
 }
 
 impl<'a, X: Tool, D: Diagnostics<X>> DriverControl<'a, X, D> {
-    fn take_owned(self) -> (DriverControlOwned<'a, X, D>, DriverControlBorrowed<'a>) {
+    pub fn take_owned(self) -> (DriverControlOwned<'a, X, D>, DriverControlBorrowed<'a>) {
         let owned = DriverControlOwned {
             diagnostics_observer: self.diagnostics_observer,
         };
