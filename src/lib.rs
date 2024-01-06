@@ -141,6 +141,24 @@ where {
                 .fscache
                 .insert(source_id, (source_path.into(), source));
         }
+        if let Some((string_path_name, source_string)) = self.driver_options.optional.source_string
+        {
+            LAST_SOURCE_ID.fetch_add(1, Ordering::SeqCst);
+            let source_id = SourceId(LAST_SOURCE_ID.load(Ordering::SeqCst));
+            driver_env
+                .fscache
+                .insert(source_id, (string_path_name.into(), source_string));
+        }
+        if let Some((stdin_name, mut source_stdin)) = self.driver_options.optional.source_stdin {
+            let mut source = String::new();
+            source_stdin.read_to_string(&mut source)?;
+            LAST_SOURCE_ID.fetch_add(1, Ordering::SeqCst);
+            let source_id = SourceId(LAST_SOURCE_ID.load(Ordering::SeqCst));
+            driver_env
+                .fscache
+                .insert(source_id, (stdin_name.into(), source));
+        }
+
         let driver_ctl = DriverControl {
             diagnostics_observer: DiagnosticsObserver::new(self.tool, driver_env.diagnostics),
             fscache: driver_env.fscache,
@@ -204,8 +222,14 @@ pub struct DriverOptions {
 #[derive(Default)]
 /// Optional arguments common to all drivers.
 pub struct DriverOptionalArgs {
-    // not yet implemented.
+    /// Reads a source at the given `path`` relative to the `current_dir()`.
     source_path: Option<path::PathBuf>,
+    /// Uses a given name, and string.
+    source_string: Option<(path::PathBuf, String)>,
+    /// Uses a given name, and the `Stdin`.
+    ///
+    /// Reads `Stdin` to completion upon driver initialization.
+    source_stdin: Option<(path::PathBuf, std::io::Stdin)>,
     #[doc(hidden)]
     _non_exhaustive: _unstable_api_::InternalDefault,
 }
