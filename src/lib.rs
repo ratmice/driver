@@ -241,7 +241,7 @@ impl<X: Tool, R: Diagnostics<X>> Drop for DiagnosticsObserver<'_, X, R> {
     }
 }
 
-impl<'a, 'b: 'a, X: Tool, D: Diagnostics<X>> DriverControl<'a, X, D> {
+impl<'a, X: Tool, D: Diagnostics<X>> DriverControl<'a, X, D> {
     fn take_owned(self) -> (DriverControlOwned<'a, X, D>, DriverControlBorrowed<'a>) {
         let owned = DriverControlOwned {
             diagnostics_observer: self.diagnostics_observer,
