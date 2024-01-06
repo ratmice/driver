@@ -391,22 +391,27 @@ mod tests {
             tool: Yacc,
             diagnostics: &mut diagnostics,
         };
-        // Just pass in `Yacc` to avoid DriverConfig::<Yacc>`.
-        let driver = DriverConfig {
-            tool: Yacc,
-            driver_options: (DriverOptions { foo: () }, Default::default()).into(),
-            options: (
-                YaccConfig {
-                    source: "",
-                    yacc_kind: YaccKind::Grmtools,
-                },
-                Default::default(),
-            )
-                .into(),
+        // Test that the DriverEnv outlives the driver.
+        {
+            // Just pass in `Yacc` to avoid DriverConfig::<Yacc>`.
+            let driver = DriverConfig {
+                tool: Yacc,
+                driver_options: (DriverOptions { foo: () }, Default::default()).into(),
+                options: (
+                    YaccConfig {
+                        source: "",
+                        yacc_kind: YaccKind::Grmtools,
+                    },
+                    Default::default(),
+                )
+                    .into(),
+            }
+            .run_driver(driver_env, SimpleSpec);
+            let _ast = driver.ast();
+            let _grm = driver.grammar()?;
+            #[allow(clippy::drop_non_drop)]
+            drop(driver);
         }
-        .run_driver(driver_env, SimpleSpec);
-        let _ast = driver.ast();
-        let _grm = driver.grammar()?;
         Ok(())
     }
 
@@ -418,22 +423,26 @@ mod tests {
             tool: Yacc,
             diagnostics: &mut diagnostics,
         };
-
-        // Just pass in `Yacc` to avoid DriverConfig::<Yacc>`.
-        let driver = DriverConfig {
-            tool: Yacc,
-            driver_options: (DriverOptions { foo: () }, Default::default()).into(),
-            options: (
-                YaccConfig {
-                    source: "invalid sources",
-                    yacc_kind: YaccKind::Grmtools,
-                },
-                Default::default(),
-            )
-                .into(),
+        // Test that the DriverEnv outlives the driver.
+        {
+            // Just pass in `Yacc` to avoid DriverConfig::<Yacc>`.
+            let driver = DriverConfig {
+                tool: Yacc,
+                driver_options: (DriverOptions { foo: () }, Default::default()).into(),
+                options: (
+                    YaccConfig {
+                        source: "invalid sources",
+                        yacc_kind: YaccKind::Grmtools,
+                    },
+                    Default::default(),
+                )
+                    .into(),
+            }
+            .run_driver(driver_ctl, SimpleSpec);
+            let _ast = driver.ast();
+            let _grm = driver.grammar().unwrap();
+            #[allow(clippy::drop_non_drop)]
+            drop(driver);
         }
-        .run_driver(driver_ctl, SimpleSpec);
-        let _ast = driver.ast();
-        let _grm = driver.grammar().unwrap();
     }
 }
