@@ -75,13 +75,13 @@ pub struct DriverConfig<'a, X: Tool> {
 
 /// This type is owned by driver, but may contain references which outlive it.
 pub struct DriverControl<'a, X: Tool, D: Diagnostics<X>> {
-    diagnostics_observer: DiagnosticsObserver<'a, X, D>,
+    diagnostics_emitter: DiagnosticsEmitter<'a, X, D>,
     fscache: &'a mut HashMap<SourceId, (Cow<'a, path::Path>, String)>,
 }
 
 /// Returned by `DriverControl::take_owned`
 pub struct DriverControlOwned<'a, X: Tool, D: Diagnostics<X>> {
-    pub diagnostics_observer: DiagnosticsObserver<'a, X, D>,
+    pub diagnostics_emitter: DiagnosticsEmitter<'a, X, D>,
 }
 
 /// Returned by `DriverControl::take_owned`
@@ -161,51 +161,50 @@ where {
         }
 
         let driver_ctl = DriverControl {
-            diagnostics_observer: DiagnosticsObserver::new(self.tool, driver_env.diagnostics),
+            diagnostics_emitter: DiagnosticsEmitter::new(self.tool, driver_env.diagnostics),
             fscache: driver_env.fscache,
         };
         Ok(X::Output::build_with_driver_ctl(self.options, driver_ctl))
     }
 }
 
-/// This can be used to send ownership of diagnostic errors and warnings.
-/// but retain knowledge of errors or warnings having occurred.
-pub struct DiagnosticsObserver<'a, X, R>
+/// Sends ownership and observes emission of diagnostics from a tool.
+pub struct DiagnosticsEmitter<'a, X, D>
 where
     X: Tool,
-    R: Diagnostics<X>,
+    D: Diagnostics<X>,
 {
     observed_warning: bool,
     observed_error: bool,
-    report: &'a mut R,
+    diagnostics: &'a mut D,
     tool: X,
 }
 
-impl<'a, X, R> DiagnosticsObserver<'a, X, R>
+impl<'a, X, D> DiagnosticsEmitter<'a, X, D>
 where
     X: Tool,
-    R: Diagnostics<X>,
+    D: Diagnostics<X>,
 {
-    fn new<'r: 'a>(tool: X, report: &'r mut R) -> Self {
+    fn new<'r: 'a>(tool: X, diagnostics: &'r mut D) -> Self {
         Self {
             observed_error: false,
             observed_warning: false,
-            report,
+            diagnostics,
             tool,
         }
     }
     pub fn error(&mut self, e: X::Error) -> Result<(), DriverToolError> {
         self.observed_error = true;
-        self.report.error(e);
+        self.diagnostics.error(e);
         Err(DriverToolError::ToolFailure)
     }
     pub fn non_fatal_error(&mut self, e: X::Error) {
         self.observed_error = true;
-        self.report.error(e);
+        self.diagnostics.error(e);
     }
     pub fn warning(&mut self, w: X::Warning) {
         self.observed_warning = true;
-        self.report.warning(w);
+        self.diagnostics.warning(w);
     }
     pub fn observed_error(&self) -> bool {
         self.observed_error
@@ -262,22 +261,22 @@ impl<X: Tool> Diagnostics<X> for SimpleDiagnostics<X> {
     fn warning(&mut self, w: X::Warning) {
         self.warnings.push(w);
     }
-    /// Called by the `DiagnosticsObserver` drop handler.
+    /// Called by the `DiagnosticsEmitter` drop handler.
     fn no_more_data(&mut self) {
         println!("no_more_data");
     }
 }
 
-impl<X: Tool, R: Diagnostics<X>> Drop for DiagnosticsObserver<'_, X, R> {
+impl<X: Tool, R: Diagnostics<X>> Drop for DiagnosticsEmitter<'_, X, R> {
     fn drop(&mut self) {
-        self.report.no_more_data()
+        self.diagnostics.no_more_data()
     }
 }
 
 impl<'a, X: Tool, D: Diagnostics<X>> DriverControl<'a, X, D> {
     pub fn take_owned(self) -> (DriverControlOwned<'a, X, D>, DriverControlBorrowed<'a>) {
         let owned = DriverControlOwned {
-            diagnostics_observer: self.diagnostics_observer,
+            diagnostics_emitter: self.diagnostics_emitter,
         };
 
         let borrowed = DriverControlBorrowed {
@@ -334,7 +333,7 @@ pub trait Diagnostics<X: Tool> {
     fn error(&mut self, error: X::Error);
     fn warning(&mut self, warning: X::Warning);
     // Is called automatically if this report is the main Diagnostics
-    // From a `DiagnosticsObserver` If this report has children,
+    // From a `DiagnosticsEmitter` If this report has children,
     // it will need to propagate the call. Should only be called once.
     //
     // Default implementation does nothing.
@@ -469,20 +468,20 @@ mod tests {
         ) -> GrammarASTWithValidationCertificate {
             let (
                 DriverControlOwned {
-                    diagnostics_observer: mut observer,
+                    diagnostics_emitter: mut emitter,
                 },
                 ctl,
             ) = ctl.take_owned();
             if let Some((_, source)) = ctl.sources().next() {
                 if !source.is_empty() {
-                    observer.non_fatal_error(YaccGrammarError::Testing(vec![]));
+                    emitter.non_fatal_error(YaccGrammarError::Testing(vec![]));
                 }
             }
             println!("{:?}", options.required.yacc_kind,);
             // now at some time in the future.
             GrammarASTWithValidationCertificate {
                 ast: GrammarAST,
-                validation_success: !observer.observed_error(),
+                validation_success: !emitter.observed_error(),
             }
         }
     }
