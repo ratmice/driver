@@ -40,12 +40,26 @@ where
     ) -> T::Output<'a>;
 }
 
+pub struct DefaultDriver;
+/// A set of configuration options for a driver.
+pub trait Driver {
+    type RequiredArgs;
+    type OptionalArgs: Default;
+    type DriverEnvTy<'a, X: Tool, C: CallerSpec<X>> where C::Diagnostics: 'a;
+}
+
+impl Driver for DefaultDriver {
+    type OptionalArgs = DriverOptionalArgs;
+    type RequiredArgs = DriverOptions;
+    type DriverEnvTy<'a, X: Tool, C: CallerSpec<X>> = DriverEnv<'a, X, C> where C::Diagnostics: 'a;
+}
+
 /// Used to configure and initialize a driver for a tool.
 /// Containing the the tool to run which must implement `Tool`,
 /// `driver_options` for the driver, and `options` for the tool.
 ///
 /// Fields are public so that they are constructable by the caller.
-pub struct DriverConfig<'a, X: Tool> {
+pub struct DriverConfig<'a, X: Tool, D: Driver = DefaultDriver> {
     /// This is mostly here to guide inference, and generally would be a unitary type.
     pub tool: X,
     /// Options which are specific to the driver and kept hidden
@@ -55,7 +69,7 @@ pub struct DriverConfig<'a, X: Tool> {
     ///
     /// Similarly if we implement `Path`/source providing in the driver.
     /// Tools should also probably not concern themselves with that.
-    pub driver_options: Options<DriverOptions, DriverOptionalArgs>,
+    pub driver_options: Options<D::RequiredArgs, D::OptionalArgs>,
     pub options: Options<X::RequiredArgs<'a>, X::OptionalArgs>,
 }
 
