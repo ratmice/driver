@@ -3,7 +3,8 @@
 
 /// I don't know how I feel about this, but it works.
 use std::io::Read as _;
-use std::{borrow::Cow, collections::HashMap};
+use std::sync::atomic::AtomicUsize;
+use std::{borrow::Cow, collections::HashMap, sync::atomic::Ordering};
 
 use std::{error, fmt, io, path};
 
@@ -73,14 +74,16 @@ pub struct DriverConfig<'a, X: Tool> {
 /// This type is owned by driver, but may contain references which outlive it.
 pub struct DriverControl<'a, X: Tool, D: Diagnostics<X>> {
     diagnostics_observer: DiagnosticsObserver<'a, X, D>,
-    fscache: &'a mut HashMap<Cow<'a, path::Path>, String>,
+    last_path_id: PathId,
+    fscache: &'a mut HashMap<PathId, (Cow<'a, path::Path>, String)>,
 }
 
 pub struct DriverControlOwned<'a, X: Tool, D: Diagnostics<X>> {
     pub diagnostics_observer: DiagnosticsObserver<'a, X, D>,
 }
 pub struct DriverControlBorrowed<'a> {
-    fscache: &'a mut HashMap<Cow<'a, path::Path>, String>,
+    last_path_id: PathId,
+    fscache: &'a mut HashMap<PathId, (Cow<'a, path::Path>, String)>,
 }
 
 /// Used to build a `DriverControl`, and may contain trait implementations
@@ -93,7 +96,7 @@ where
     tool: X,
 
     diagnostics: &'a mut C::Diagnostics,
-    fscache: &'a mut HashMap<Cow<'a, path::Path>, String>,
+    fscache: &'a mut HashMap<PathId, (Cow<'a, path::Path>, String)>,
 }
 
 /// Provided by the
@@ -111,6 +114,9 @@ pub enum DriverError {
     #[error("Io error {0} ")]
     Io(#[from] io::Error),
 }
+
+static LAST_PATH_ID: AtomicUsize = AtomicUsize::new(0);
+
 impl<'a, X: Tool> DriverConfig<'a, X> {
     /// Builds a DriverControl, calling `build_with_driver_ctl`.
     /// to return a tool specific `Output` type.
@@ -120,15 +126,21 @@ impl<'a, X: Tool> DriverConfig<'a, X> {
         caller_spec: C,
     ) -> Result<X::Output<'a>, DriverError>
 where {
+        let last_path_id = PathId(0);
         if let Some(source_path) = self.driver_options.optional.source_path.take() {
             let dir = cap_std::fs::Dir::open_ambient_dir(".", cap_std::ambient_authority())?;
             let mut file = dir.open(&source_path)?;
             let mut source = String::new();
+            LAST_PATH_ID.fetch_add(1, Ordering::SeqCst);
+            let path_id = PathId(LAST_PATH_ID.load(Ordering::SeqCst));
             file.read_to_string(&mut source)?;
-            driver_env.fscache.insert(source_path.into(), source);
+            driver_env
+                .fscache
+                .insert(path_id, (source_path.into(), source));
         }
         let driver_ctl = DriverControl {
             diagnostics_observer: DiagnosticsObserver::new(self.tool, driver_env.diagnostics),
+            last_path_id,
             fscache: driver_env.fscache,
         };
         Ok(X::Output::build_with_driver_ctl(self.options, driver_ctl))
@@ -240,6 +252,7 @@ impl<'a, 'b: 'a, X: Tool, D: Diagnostics<X>> DriverControl<'a, X, D> {
         };
 
         let borrowed = DriverControlBorrowed {
+            last_path_id: self.last_path_id,
             fscache: self.fscache,
         };
         (owned, borrowed)
@@ -247,10 +260,16 @@ impl<'a, 'b: 'a, X: Tool, D: Diagnostics<X>> DriverControl<'a, X, D> {
 }
 
 impl<'a> DriverControlBorrowed<'a> {
-    pub fn sources(&self) -> impl Iterator<Item = &str> {
-        self.fscache.iter().map(|(path, src)| src.as_str())
+    pub fn sources(&self) -> impl Iterator<Item = (PathId, &str)> {
+        self.fscache
+            .iter()
+            .map(|(path_id, (_, src))| (*path_id, src.as_str()))
     }
 }
+
+#[derive(PartialEq, Eq, Hash, Copy, Clone)]
+/// An opaque ID unique
+pub struct PathId(usize);
 
 #[derive(Debug)]
 pub enum DriverToolError {
@@ -416,7 +435,7 @@ mod tests {
                 },
                 ctl,
             ) = ctl.take_owned();
-            if let Some(source) = ctl.sources().next() {
+            if let Some((_, source)) = ctl.sources().next() {
                 if !source.is_empty() {
                     observer.non_fatal_error(YaccGrammarError::Testing(vec![]));
                 }
