@@ -96,9 +96,10 @@ where
     X: Tool,
     C: CallerSpec<X>,
 {
-    tool: X,
-    diagnostics: &'a mut C::Diagnostics,
-    fscache: &'a mut HashMap<SourceId, (Cow<'a, path::Path>, String)>,
+    // Pub because these need to be constructible from outside the crate.
+    pub tool: X,
+    pub diagnostics: &'a mut C::Diagnostics,
+    pub fscache: &'a mut HashMap<SourceId, (Cow<'a, path::Path>, String)>,
 }
 
 /// Associated types provided by the caller.
