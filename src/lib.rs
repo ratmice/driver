@@ -74,16 +74,14 @@ pub struct DriverConfig<'a, X: Tool> {
 /// This type is owned by driver, but may contain references which outlive it.
 pub struct DriverControl<'a, X: Tool, D: Diagnostics<X>> {
     diagnostics_observer: DiagnosticsObserver<'a, X, D>,
-    last_path_id: PathId,
-    fscache: &'a mut HashMap<PathId, (Cow<'a, path::Path>, String)>,
+    fscache: &'a mut HashMap<SourceId, (Cow<'a, path::Path>, String)>,
 }
 
 pub struct DriverControlOwned<'a, X: Tool, D: Diagnostics<X>> {
     pub diagnostics_observer: DiagnosticsObserver<'a, X, D>,
 }
 pub struct DriverControlBorrowed<'a> {
-    last_path_id: PathId,
-    fscache: &'a mut HashMap<PathId, (Cow<'a, path::Path>, String)>,
+    fscache: &'a mut HashMap<SourceId, (Cow<'a, path::Path>, String)>,
 }
 
 /// Used to build a `DriverControl`, and may contain trait implementations
@@ -96,7 +94,7 @@ where
     tool: X,
 
     diagnostics: &'a mut C::Diagnostics,
-    fscache: &'a mut HashMap<PathId, (Cow<'a, path::Path>, String)>,
+    fscache: &'a mut HashMap<SourceId, (Cow<'a, path::Path>, String)>,
 }
 
 /// Provided by the
@@ -115,7 +113,7 @@ pub enum DriverError {
     Io(#[from] io::Error),
 }
 
-static LAST_PATH_ID: AtomicUsize = AtomicUsize::new(0);
+static LAST_SOURCE_ID: AtomicUsize = AtomicUsize::new(0);
 
 impl<'a, X: Tool> DriverConfig<'a, X> {
     /// Builds a DriverControl, calling `build_with_driver_ctl`.
@@ -126,21 +124,19 @@ impl<'a, X: Tool> DriverConfig<'a, X> {
         caller_spec: C,
     ) -> Result<X::Output<'a>, DriverError>
 where {
-        let last_path_id = PathId(0);
         if let Some(source_path) = self.driver_options.optional.source_path.take() {
             let dir = cap_std::fs::Dir::open_ambient_dir(".", cap_std::ambient_authority())?;
             let mut file = dir.open(&source_path)?;
             let mut source = String::new();
-            LAST_PATH_ID.fetch_add(1, Ordering::SeqCst);
-            let path_id = PathId(LAST_PATH_ID.load(Ordering::SeqCst));
+            LAST_SOURCE_ID.fetch_add(1, Ordering::SeqCst);
+            let source_id = SourceId(LAST_SOURCE_ID.load(Ordering::SeqCst));
             file.read_to_string(&mut source)?;
             driver_env
                 .fscache
-                .insert(path_id, (source_path.into(), source));
+                .insert(source_id, (source_path.into(), source));
         }
         let driver_ctl = DriverControl {
             diagnostics_observer: DiagnosticsObserver::new(self.tool, driver_env.diagnostics),
-            last_path_id,
             fscache: driver_env.fscache,
         };
         Ok(X::Output::build_with_driver_ctl(self.options, driver_ctl))
@@ -252,7 +248,6 @@ impl<'a, 'b: 'a, X: Tool, D: Diagnostics<X>> DriverControl<'a, X, D> {
         };
 
         let borrowed = DriverControlBorrowed {
-            last_path_id: self.last_path_id,
             fscache: self.fscache,
         };
         (owned, borrowed)
@@ -260,16 +255,21 @@ impl<'a, 'b: 'a, X: Tool, D: Diagnostics<X>> DriverControl<'a, X, D> {
 }
 
 impl<'a> DriverControlBorrowed<'a> {
-    pub fn sources(&self) -> impl Iterator<Item = (PathId, &str)> {
+    // SourceIds are unique even across multiple runs, and may be different
+    // for the same path, when the sources are loaded multiple times,
+    pub fn sources(&self) -> impl Iterator<Item = (SourceId, &str)> {
         self.fscache
             .iter()
-            .map(|(path_id, (_, src))| (*path_id, src.as_str()))
+            .map(|(source_id, (_, src))| (*source_id, src.as_str()))
     }
 }
 
 #[derive(PartialEq, Eq, Hash, Copy, Clone)]
-/// An opaque ID unique
-pub struct PathId(usize);
+/// opaque ID for source strings:
+///
+/// * A source string may have multiple SourceIDs.
+/// * A SourceID refers uniquely to a single source string.
+pub struct SourceId(usize);
 
 #[derive(Debug)]
 pub enum DriverToolError {
