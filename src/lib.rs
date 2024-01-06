@@ -29,18 +29,7 @@ where
     type OptionalArgs: Default;
 }
 
-/// A `DriverControl`, is built from a `DriverEnv`.
-/// Which then gets built within `driver_init`.
-///
-/// `DriverControl`, just provides functions which the
-/// implementer may call to interact with a driver,
-/// such as a `DiagnosticsObserver`.
-///
-/// In the future there is some thoughts, that the `DriverControl`,
-/// Can also eventually handle things filesystem interaction
-/// presenting a tool with an `&str` without having
-/// to concern itself with how it arrives.  Whether from
-/// a `Path`, or a string passed in by the user.
+/// Trait for constructing tool output.
 pub trait OutputWithDriverControl<'a, T>
 where
     T: Tool,
@@ -51,12 +40,9 @@ where
     ) -> T::Output<'a>;
 }
 
-/// `DriverConfig` gets passed in from within `driver_init`,
-/// provded to the implementation of `BuildWithDriverControl`.
-/// While `DriverOptions` are *not* passed in, and reserved for the driver.
-///
-/// There may be some form of `DriverOptions` which we do want to provide
-/// Presumably they can be obtained through a `DriverControl`.
+/// Used to configure and initialize a driver for a tool.
+/// Containing the the tool to run which must implement `Tool`,
+/// `driver_options` for the driver, and `options` for the tool.
 ///
 /// Fields are public so that they are constructable by the caller.
 pub struct DriverConfig<'a, X: Tool> {
@@ -89,8 +75,9 @@ pub struct DriverControlBorrowed<'a> {
     fscache: &'a mut HashMap<SourceId, (Cow<'a, path::Path>, String)>,
 }
 
-/// Used to build a `DriverControl`, and may contain trait implementations
-/// specified by the caller.  Currently this is not very future-proof.
+/// Used to construct a `DriverControl`.
+///
+/// This structure should be specified by the caller however currently this is not very future-proof.
 pub struct DriverEnv<'a, X, C>
 where
     X: Tool,
@@ -216,7 +203,7 @@ where
 
 /// Required options that are common to all drivers.
 pub struct DriverOptions {
-    pub foo: (),
+    // There are not currently any required options for the tool.
 }
 
 #[derive(Default)]
@@ -500,7 +487,7 @@ mod tests {
             // Just pass in `Yacc` to avoid DriverConfig::<Yacc>`.
             let driver = DriverConfig {
                 tool: Yacc,
-                driver_options: (DriverOptions { foo: () }, Default::default()).into(),
+                driver_options: (DriverOptions {}, Default::default()).into(),
                 options: (
                     YaccConfig {
                         yacc_kind: YaccKind::Grmtools,
@@ -536,7 +523,7 @@ mod tests {
             let driver = DriverConfig {
                 tool: Yacc,
                 driver_options: (
-                    DriverOptions { foo: () },
+                    DriverOptions {},
                     DriverOptionalArgs {
                         source_path: Some("Cargo.toml".into()),
                         ..Default::default()
