@@ -30,7 +30,7 @@ where
 }
 
 /// A `DriverControl`, is built from a `DriverEnv`.
-/// Which then gets built within `run_driver`.
+/// Which then gets built within `driver_init`.
 ///
 /// `DriverControl`, just provides functions which the
 /// implementer may call to interact with a driver,
@@ -51,7 +51,7 @@ where
     ) -> T::Output<'a>;
 }
 
-/// `DriverConfig` gets passed in from within `run_driver`,
+/// `DriverConfig` gets passed in from within `driver_init`,
 /// provded to the implementation of `BuildWithDriverControl`.
 /// While `DriverOptions` are *not* passed in, and reserved for the driver.
 ///
@@ -97,7 +97,6 @@ where
     C: CallerSpec<X>,
 {
     tool: X,
-
     diagnostics: &'a mut C::Diagnostics,
     fscache: &'a mut HashMap<SourceId, (Cow<'a, path::Path>, String)>,
 }
@@ -125,7 +124,7 @@ static LAST_SOURCE_ID: AtomicUsize = AtomicUsize::new(0);
 impl<'a, X: Tool> DriverConfig<'a, X> {
     /// Builds a DriverControl, calling `build_with_driver_ctl`.
     /// to return a tool specific `Output` type.
-    pub fn run_driver<'b: 'a, C: CallerSpec<X>>(
+    pub fn driver_init<'b: 'a, C: CallerSpec<X>>(
         mut self,
         driver_env: DriverEnv<'b, X, SimpleSpec>,
         caller_spec: C,
@@ -482,7 +481,7 @@ mod tests {
                 )
                     .into(),
             }
-            .run_driver(driver_env, SimpleSpec)
+            .driver_init(driver_env, SimpleSpec)
             .unwrap();
             let _ast = driver.ast();
             let _grm = driver.grammar().unwrap();
@@ -524,7 +523,7 @@ mod tests {
                 )
                     .into(),
             }
-            .run_driver(driver_env, SimpleSpec)
+            .driver_init(driver_env, SimpleSpec)
             .unwrap();
             let _ast = driver.ast();
             let _grm = driver.grammar().unwrap();
