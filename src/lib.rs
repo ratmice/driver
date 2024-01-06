@@ -80,7 +80,7 @@ where
     C: CallerSpec<X>,
 {
     tool: X,
-    caller_spec: C,
+
     diagnostics: &'a mut C::Diagnostics,
 }
 
@@ -100,6 +100,7 @@ impl<'a, X: Tool> DriverConfig<'a, X> {
     pub fn run_driver<'b: 'a, C: CallerSpec<X>>(
         self,
         driver_ctl: DriverEnv<'b, X, SimpleSpec>,
+        caller_spec: C,
     ) -> X::Output<'a>
 where {
         let driver_env = DriverControl {
@@ -388,7 +389,6 @@ mod tests {
         let mut diagnostics = SimpleDiagnostics::default();
         let driver_env = DriverEnv {
             tool: Yacc,
-            caller_spec: SimpleSpec,
             diagnostics: &mut diagnostics,
         };
         // Just pass in `Yacc` to avoid DriverConfig::<Yacc>`.
@@ -404,7 +404,7 @@ mod tests {
             )
                 .into(),
         }
-        .run_driver::<SimpleSpec>(driver_env);
+        .run_driver(driver_env, SimpleSpec);
         let _ast = driver.ast();
         let _grm = driver.grammar()?;
         Ok(())
@@ -416,9 +416,9 @@ mod tests {
         let mut diagnostics = SimpleDiagnostics::default();
         let driver_ctl = DriverEnv {
             tool: Yacc,
-            caller_spec: SimpleSpec,
             diagnostics: &mut diagnostics,
         };
+
         // Just pass in `Yacc` to avoid DriverConfig::<Yacc>`.
         let driver = DriverConfig {
             tool: Yacc,
@@ -432,7 +432,7 @@ mod tests {
             )
                 .into(),
         }
-        .run_driver::<SimpleSpec>(driver_ctl);
+        .run_driver(driver_ctl, SimpleSpec);
         let _ast = driver.ast();
         let _grm = driver.grammar().unwrap();
     }
