@@ -294,6 +294,10 @@ impl<'a> DriverControlBorrowed<'a> {
             .iter()
             .map(|(source_id, (_, src))| (*source_id, src.as_str()))
     }
+
+    pub fn source_for_id(&self, source_id: SourceId) -> Option<&str> {
+        self.fscache.get(&source_id).map(|(_, src)| src.as_str())
+    }
 }
 
 #[derive(PartialEq, Eq, Hash, Copy, Clone)]
