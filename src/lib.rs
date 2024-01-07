@@ -113,22 +113,6 @@ pub struct DriverConfig<'args, X: Tool, D: Driver = DefaultDriver> {
     pub options: Options<X::RequiredArgs<'args>, X::OptionalArgs>,
 }
 
-/// Associated types provided by the caller.
-///
-/// This one is pretty fragile, need to carefully think about what types/traits
-/// It should guarantee, since it shared across all drivers.
-///
-/// It likely wants a source cache trait for vfs reasons.
-pub trait CallerSpec<X: Tool> {
-    type Diagnostics: Diagnostics<X>;
-}
-
-/// An impl of CallerSpec that can be used with SimpleDiagnostics.
-pub struct SimpleSpec;
-impl<X: Tool> CallerSpec<X> for SimpleSpec {
-    type Diagnostics = SimpleDiagnostics<X>;
-}
-
 /// Errors occurred by the driver.
 #[derive(thiserror::Error, Debug)]
 pub enum DriverError {
@@ -143,11 +127,10 @@ impl<'args, X: Tool> DriverConfig<'args, X /* Driver = DefaultDriver */> {
     /// 1. Populates a `source_cache`
     /// 2. Constructes a `Diagnostics emitter`.
     /// 3. Passes everything above to the tool's implementation of `tool_init`.
-    pub fn driver_init<C: CallerSpec<X>>(
+    pub fn driver_init<D: Diagnostics<X>>(
         mut self,
-        diagnostics: &mut C::Diagnostics,
+        diagnostics: &mut D,
         source_cache: &mut HashMap<SourceId, (path::PathBuf, String)>,
-        caller_spec: C,
     ) -> Result<X::Output, DriverError> {
         if let Some(source_path) = self.driver_options.optional.source_path.take() {
             let dir = cap_std::fs::Dir::open_ambient_dir(".", cap_std::ambient_authority())?;
@@ -494,7 +477,7 @@ mod tests {
                 )
                     .into(),
             }
-            .driver_init(&mut diagnostics, &mut source_cache, SimpleSpec)
+            .driver_init(&mut diagnostics, &mut source_cache)
             .unwrap();
             let _ast = driver.ast();
             let _grm = driver.grammar().unwrap();
@@ -531,7 +514,7 @@ mod tests {
                 )
                     .into(),
             }
-            .driver_init(&mut diagnostics, &mut source_cache, SimpleSpec)
+            .driver_init(&mut diagnostics, &mut source_cache)
             .unwrap();
             let _ast = driver.ast();
             let _grm = driver.grammar().unwrap();
@@ -551,11 +534,10 @@ mod tests {
         let mut diagnostics = SimpleDiagnostics::default();
         let mut source_cache = HashMap::new();
         impl<X: Tool> DriverConfig<'_, X, ()> {
-            pub fn driver_init<C: CallerSpec<X>>(
+            pub fn driver_init<D: Diagnostics<X>>(
                 self,
                 source_cache: &mut HashMap<SourceId, (path::PathBuf, String)>,
-                diagnostics: &mut C::Diagnostics,
-                caller_spec: C,
+                diagnostics: &mut D,
             ) -> Result<X::Output, DriverError> {
                 let emitter = DiagnosticsEmitter::new(self.tool, diagnostics);
                 let source_cache = SourceCache { source_cache };
@@ -577,7 +559,7 @@ mod tests {
                 )
                     .into(),
             }
-            .driver_init(&mut source_cache, &mut diagnostics, SimpleSpec)
+            .driver_init(&mut source_cache, &mut diagnostics)
             .unwrap();
             let _ast = driver.ast();
             let _grm = driver.grammar().unwrap();
@@ -677,7 +659,7 @@ mod tests {
                 driver_options: ((), true).into(),
                 options: ((), ()).into(),
             }
-            .driver_init(&mut source_cache, &mut diagnostics, SimpleSpec)
+            .driver_init(&mut source_cache, &mut diagnostics)
             .unwrap();
             #[allow(clippy::drop_non_drop)]
             drop(driver);
@@ -702,7 +684,7 @@ mod tests {
                     .into(),
                 options: ((), ()).into(),
             }
-            .driver_init(&mut diagnostics, &mut source_cache, SimpleSpec)
+            .driver_init(&mut diagnostics, &mut source_cache)
             .unwrap();
             #[allow(clippy::drop_non_drop)]
             drop(driver);
@@ -730,7 +712,7 @@ mod tests {
                 )
                     .into(),
             }
-            .driver_init(&mut diagnostics, &mut source_cache, SimpleSpec)
+            .driver_init(&mut diagnostics, &mut source_cache)
             .unwrap();
             let _ast = driver.ast();
             let _grm = driver.grammar().unwrap();
