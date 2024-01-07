@@ -13,12 +13,16 @@ mod _unstable_api_ {
     pub struct InternalDefault;
 }
 
+pub trait SourceArtifact {
+    fn source_id(&self) -> SourceId;
+}
+
 pub trait Tool
 where
     Self: Sized + Copy,
 {
     /// The type of errors specific to a tool.
-    type Error: error::Error + Spanned;
+    type Error: SourceArtifact + error::Error + Spanned;
     /// The type of warnings specific to a tool.
     type Warning: Spanned;
     /// The type output by the tool.
@@ -315,6 +319,7 @@ impl<'a> DriverControlBorrowed<'a> {
 ///
 /// * A source string may have multiple SourceIDs.
 /// * A SourceID refers uniquely to a single source string.
+#[derive(Debug)]
 pub struct SourceId(usize);
 
 /// Errors have been emitted by the tool, that were observed by the driver.
@@ -395,19 +400,31 @@ mod tests {
     }
 
     #[derive(Debug)]
-    enum YaccGrammarError {
+    struct YaccGrammarError {
+        source_id: SourceId,
+        kind: YaccGrammarErrorKind,
+    }
+
+    #[derive(Debug)]
+    enum YaccGrammarErrorKind {
         Testing(Vec<Span>),
+    }
+
+    impl SourceArtifact for YaccGrammarError {
+        fn source_id(&self) -> SourceId {
+            self.source_id
+        }
     }
 
     impl Spanned for YaccGrammarError {
         fn spans(&self) -> &[Span] {
-            match self {
-                Self::Testing(x) => x,
+            match &self.kind {
+                YaccGrammarErrorKind::Testing(x) => x.as_slice(),
             }
         }
         fn spanskind(&self) -> SpansKind {
-            match self {
-                Self::Testing(_) => SpansKind::DuplicationError,
+            match self.kind {
+                YaccGrammarErrorKind::Testing(_) => SpansKind::DuplicationError,
             }
         }
     }
@@ -479,9 +496,12 @@ mod tests {
                 },
                 ctl,
             ) = ctl.take_owned();
-            if let Some((_, source)) = ctl.sources().next() {
+            if let Some((source_id, source)) = ctl.sources().next() {
                 if !source.is_empty() {
-                    emitter.emit_non_fatal_error(YaccGrammarError::Testing(vec![]));
+                    emitter.emit_non_fatal_error(YaccGrammarError {
+                        source_id,
+                        kind: YaccGrammarErrorKind::Testing(vec![]),
+                    });
                 }
             }
             println!("{:?}", options.required.yacc_kind,);
