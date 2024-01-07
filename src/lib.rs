@@ -203,10 +203,10 @@ where
             tool,
         }
     }
-    pub fn emit_error(&mut self, e: X::Error) -> Result<(), DriverToolError> {
+    pub fn emit_error(&mut self, e: X::Error) -> Result<(), ToolError> {
         self.observed_error = true;
         self.diagnostics.emit_error(e);
-        Err(DriverToolError::ToolFailure)
+        Err(ToolError::ToolFailure)
     }
     pub fn emit_non_fatal_error(&mut self, e: X::Error) {
         self.observed_error = true;
@@ -319,7 +319,7 @@ pub struct SourceId(usize);
 
 /// Errors have been emitted by the tool, that were observed by the driver.
 #[derive(Debug)]
-pub enum DriverToolError {
+pub enum ToolError {
     ToolFailure,
 }
 #[derive(Debug)]
@@ -453,11 +453,11 @@ mod tests {
     }
 
     impl GrammarASTWithValidationCertificate {
-        fn grammar(&self) -> Result<YaccGrammar, DriverToolError> {
+        fn grammar(&self) -> Result<YaccGrammar, ToolError> {
             if self.validation_success {
                 Ok(YaccGrammar)
             } else {
-                Err(DriverToolError::ToolFailure)
+                Err(ToolError::ToolFailure)
             }
         }
         fn ast(&self) -> &GrammarAST {
