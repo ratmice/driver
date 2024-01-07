@@ -27,7 +27,7 @@ where
     /// The type of errors specific to a tool.
     type Error: SourceArtifact + error::Error + Spanned;
     /// The type of warnings specific to a tool.
-    type Warning: Spanned;
+    type Warning: SourceArtifact + Spanned;
     /// The type output by the tool.
     type Output: for<'args> ToolInit<'args, Self>;
     /// A tool specific type for arguments must be given.

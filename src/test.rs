@@ -57,7 +57,7 @@ mod tests {
             }
         }
         fn spanskind(&self) -> SpansKind {
-            match self.kind {
+            match &self.kind {
                 YaccGrammarErrorKind::Testing(_) => SpansKind::DuplicationError,
             }
         }
@@ -74,19 +74,29 @@ mod tests {
             unimplemented!()
         }
     }
-    enum YaccGrammarWarning {
+
+    struct YaccGrammarWarning {
+        source_id: SourceId,
+        kind: YaccGrammarWarningKind,
+    }
+    impl SourceArtifact for YaccGrammarWarning {
+        fn source_id(&self) -> SourceId {
+            self.source_id
+        }
+    }
+    enum YaccGrammarWarningKind {
         Testing(Vec<Span>),
     }
 
     impl Spanned for YaccGrammarWarning {
         fn spans(&self) -> &[Span] {
-            match self {
-                Self::Testing(x) => x,
+            match &self.kind {
+                YaccGrammarWarningKind::Testing(x) => x,
             }
         }
         fn spanskind(&self) -> SpansKind {
-            match self {
-                Self::Testing(_) => SpansKind::DuplicationError,
+            match self.kind {
+                YaccGrammarWarningKind::Testing(_) => SpansKind::DuplicationError,
             }
         }
     }
@@ -287,6 +297,11 @@ mod tests {
         kind: LexErrorKind,
     }
     impl Error for LexError {}
+    impl SourceArtifact for NeverWarnings {
+        fn source_id(&self) -> SourceId {
+            unreachable!()
+        }
+    }
     impl SourceArtifact for LexError {
         fn source_id(&self) -> SourceId {
             self.source_id
@@ -307,11 +322,11 @@ mod tests {
 
     impl Spanned for NeverWarnings {
         fn spans(&self) -> &[Span] {
-            unimplemented!()
+            unreachable!()
         }
 
         fn spanskind(&self) -> SpansKind {
-            unimplemented!()
+            unreachable!()
         }
     }
 
