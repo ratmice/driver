@@ -49,20 +49,20 @@ where
     ) -> X::Output;
 }
 
+#[doc(hidden)]
 pub struct DefaultDriver;
-/// A Default driver implementation,
-///
-/// Has required, optional arguments and specifies an environment
-pub trait Driver: _unstable_api_::InternalTrait {
+
+#[doc(hidden)]
+pub trait DriverArgsSelection: _unstable_api_::InternalTrait {
     type RequiredArgs;
     type OptionalArgs: Default;
 }
 
 impl _unstable_api_::InternalTrait for DefaultDriver {}
 
-impl Driver for DefaultDriver {
+impl DriverArgsSelection for DefaultDriver {
     type OptionalArgs = DriverOptionalArgs;
-    type RequiredArgs = DriverOptions;
+    type RequiredArgs = DriverArgs;
 }
 
 pub struct SourceCache<'a> {
@@ -99,7 +99,7 @@ impl<'src> SourceCache<'src> {
 /// `driver_options` for itself, and `options` for the tool.
 ///
 /// Fields are public so that they are constructable by the caller.
-pub struct DriverConfig<'args, X: Tool, D: Driver = DefaultDriver> {
+pub struct Driver<'args, X: Tool, D: DriverArgsSelection = DefaultDriver> {
     /// This is mostly here to guide inference, and generally would be a unitary type.
     pub tool: X,
     pub driver: D,
@@ -141,7 +141,7 @@ impl Session {
     }
 }
 
-impl<'args, X: Tool> DriverConfig<'args, X /* Driver = DefaultDriver */> {
+impl<'args, X: Tool> Driver<'args, X /* Driver = DefaultDriver */> {
     ///
     /// 1. Populates a `source_cache`
     /// 2. Constructes a `Diagnostics emitter`.
@@ -231,7 +231,7 @@ where
 }
 
 /// Required options that are common to all drivers.
-pub struct DriverOptions {
+pub struct DriverArgs {
     // There are not currently any required options for the tool.
 }
 

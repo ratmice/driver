@@ -150,12 +150,12 @@ mod tests {
         let mut diagnostics: SimpleDiagnostics<Yacc> = SimpleDiagnostics::default();
         let mut source_cache = HashMap::new();
         {
-            // Just pass in `Yacc` to avoid DriverConfig::<Yacc>`.
-            let driver = DriverConfig {
+            // Just pass in `Yacc` to avoid Driver::<Yacc>`.
+            let driver = Driver {
                 driver: DefaultDriver,
                 tool: Yacc,
                 driver_options: (
-                    DriverOptions {},
+                    DriverArgs {},
                     DriverOptionalArgs {
                         source_path: Some("Cargo.lock".into()),
                         ..Default::default()
@@ -187,12 +187,12 @@ mod tests {
         let mut source_cache = HashMap::new();
 
         {
-            // Just pass in `Yacc` to avoid DriverConfig::<Yacc>`.
-            let driver = DriverConfig {
+            // Just pass in `Yacc` to avoid Driver::<Yacc>`.
+            let driver = Driver {
                 tool: Yacc,
                 driver: DefaultDriver,
                 driver_options: (
-                    DriverOptions {},
+                    DriverArgs {},
                     DriverOptionalArgs {
                         source_path: Some("Cargo.toml".into()),
                         ..Default::default()
@@ -219,14 +219,14 @@ mod tests {
     #[test]
     fn unit_driver() {
         impl _unstable_api_::InternalTrait for () {}
-        impl Driver for () {
+        impl DriverArgsSelection for () {
             type RequiredArgs = ();
             type OptionalArgs = bool;
         }
         // These fields should perhaps be combined into something?
         let mut diagnostics = SimpleDiagnostics::default();
         let mut source_cache = HashMap::new();
-        impl<X: Tool> DriverConfig<'_, X, ()> {
+        impl<X: Tool> Driver<'_, X, ()> {
             pub fn driver_init<D: Diagnostics<X>>(
                 self,
                 source_cache: &mut HashMap<SourceId, (path::PathBuf, String)>,
@@ -245,8 +245,8 @@ mod tests {
         }
 
         {
-            // Just pass in `Yacc` to avoid DriverConfig::<Yacc>`.
-            let driver = DriverConfig {
+            // Just pass in `Yacc` to avoid Driver::<Yacc>`.
+            let driver = Driver {
                 tool: Yacc,
                 driver: (),
                 driver_options: ((), true).into(),
@@ -352,8 +352,8 @@ mod tests {
         let mut source_cache = HashMap::new();
         {
             let mut diagnostics = SimpleDiagnostics::default();
-            // Just pass in `Yacc` to avoid DriverConfig::<Yacc>`.
-            let driver = DriverConfig {
+            // Just pass in `Yacc` to avoid Driver::<Yacc>`.
+            let driver = Driver {
                 tool: Lex,
                 driver: (),
                 driver_options: ((), true).into(),
@@ -370,12 +370,12 @@ mod tests {
         let mut source_cache = HashMap::new();
         {
             let mut diagnostics = SimpleDiagnostics::default();
-            // Just pass in `Yacc` to avoid DriverConfig::<Yacc>`.
-            let driver = DriverConfig {
+            // Just pass in `Yacc` to avoid Driver::<Yacc>`.
+            let driver = Driver {
                 tool: Lex,
                 driver: DefaultDriver,
                 driver_options: (
-                    DriverOptions {},
+                    DriverArgs {},
                     DriverOptionalArgs {
                         source_path: Some("Cargo.lock".into()),
                         ..Default::default()
@@ -392,12 +392,12 @@ mod tests {
 
         {
             let mut diagnostics = SimpleDiagnostics::default();
-            // Just pass in `Yacc` to avoid DriverConfig::<Yacc>`.
-            let driver = DriverConfig {
+            // Just pass in `Yacc` to avoid Driver::<Yacc>`.
+            let driver = Driver {
                 tool: Yacc,
                 driver: DefaultDriver,
                 driver_options: (
-                    DriverOptions {},
+                    DriverArgs {},
                     DriverOptionalArgs {
                         source_path: Some("Cargo.lock".into()),
                         ..Default::default()
