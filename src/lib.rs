@@ -153,7 +153,14 @@ impl<'args, X: Tool> Driver<'args, X /* Driver = DefaultDriver */> {
     ) -> Result<X::Output, DriverError> {
         let mut source_ids = Vec::new();
         if let Some(source_path) = self.driver_options.optional.source_path.take() {
-            let dir = cap_std::fs::Dir::open_ambient_dir(".", cap_std::ambient_authority())?;
+            let dir = cap_std::fs::Dir::open_ambient_dir(
+                if let Some(path) = self.driver_options.optional.relative_to_path {
+                    path
+                } else {
+                    std::env::current_dir()?
+                },
+                cap_std::ambient_authority(),
+            )?;
             let mut file = dir.open(&source_path)?;
             let mut source = String::new();
             LAST_SOURCE_ID.fetch_add(1, Ordering::SeqCst);
@@ -238,12 +245,33 @@ pub struct DriverArgs {
 #[derive(Default)]
 /// Optional arguments common to all drivers.
 pub struct DriverOptionalArgs {
-    /// Reads a source at the given `path`` relative to the `current_dir()`.
+    /// Reads a source at the given `path` relative to the
+    /// `relative_to_path` argument.
     pub source_path: Option<path::PathBuf>,
     /// Uses a given name, and string.
     pub source_string: Option<(path::PathBuf, String)>,
+    /// Allows `source_path` lookup relative to a directory path.
+    /// Defaults to the current working directory.
+    ///
+    /// To allow unrestricted lookups across the filesystem,
+    /// you'll need to set this to the root path.
+    ///
+    /// ```
+    /// # use driver::DriverOptionalArgs;
+    /// # let _ =
+    /// DriverOptionalArgs {
+    ///    relative_to_path: Some((&std::path::Component::RootDir).into()),
+    ///    .. Default::default()
+    /// }
+    /// # ;
+    /// ````
+    ///
+    /// Setting this to any other directory will cause
+    /// lookups to be done relative to that path instead.
+    pub relative_to_path: Option<path::PathBuf>,
+
     #[doc(hidden)]
-    _non_exhaustive: _unstable_api_::InternalDefault,
+    pub _non_exhaustive: _unstable_api_::InternalDefault,
 }
 
 /// A Simple implementation of a `Diagnostics` trait.
