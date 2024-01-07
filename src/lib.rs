@@ -4,8 +4,7 @@
 /// I don't know how I feel about this, but it works.
 use std::io::Read as _;
 use std::sync::atomic::AtomicUsize;
-use std::{borrow::Cow, collections::HashMap, sync::atomic::Ordering};
-
+use std::{collections::HashMap, sync::atomic::Ordering};
 use std::{error, fmt, io, path};
 
 mod _unstable_api_ {
@@ -30,22 +29,23 @@ where
     /// The type of warnings specific to a tool.
     type Warning: Spanned;
     /// The type output by the tool.
-    type Output<'a>: OutputWithDriverControl<'a, Self>;
+    type Output: for<'args> ToolInit<'args, Self>;
     /// A tool specific type for arguments must be given.
-    type RequiredArgs<'a>;
+    type RequiredArgs<'args>;
     /// A tool specific type for arguments which derive `Default`
     type OptionalArgs: Default;
 }
 
 /// Trait for constructing tool output.
-pub trait OutputWithDriverControl<'a, T>
+pub trait ToolInit<'args, X>
 where
-    T: Tool,
+    X: Tool,
 {
-    fn build_with_driver_ctl<D: Diagnostics<T>>(
-        config: Options<T::RequiredArgs<'a>, T::OptionalArgs>,
-        control: DriverControl<'_, T, D>,
-    ) -> T::Output<'a>;
+    fn tool_init<D: Diagnostics<X>>(
+        config: Options<X::RequiredArgs<'args>, X::OptionalArgs>,
+        source_cache: &HashMap<SourceId, (path::PathBuf, String)>,
+        diagnostics: DiagnosticsEmitter<X, D>,
+    ) -> X::Output;
 }
 
 pub struct DefaultDriver;
@@ -55,9 +55,6 @@ pub struct DefaultDriver;
 pub trait Driver: _unstable_api_::InternalTrait {
     type RequiredArgs;
     type OptionalArgs: Default;
-    type DriverEnvTy<'a, X: Tool, C: CallerSpec<X>>
-    where
-        C::Diagnostics: 'a;
 }
 
 impl _unstable_api_::InternalTrait for DefaultDriver {}
@@ -65,7 +62,6 @@ impl _unstable_api_::InternalTrait for DefaultDriver {}
 impl Driver for DefaultDriver {
     type OptionalArgs = DriverOptionalArgs;
     type RequiredArgs = DriverOptions;
-    type DriverEnvTy<'a, X: Tool, C: CallerSpec<X>> = DriverEnv<'a, X, C> where C::Diagnostics: 'a;
 }
 
 /// Used to configure and initialize a driver for a tool.
@@ -74,7 +70,7 @@ impl Driver for DefaultDriver {
 /// `driver_options` for itself, and `options` for the tool.
 ///
 /// Fields are public so that they are constructable by the caller.
-pub struct DriverConfig<'a, X: Tool, D: Driver = DefaultDriver> {
+pub struct DriverConfig<'args, X: Tool, D: Driver = DefaultDriver> {
     /// This is mostly here to guide inference, and generally would be a unitary type.
     pub tool: X,
     pub driver: D,
@@ -86,35 +82,7 @@ pub struct DriverConfig<'a, X: Tool, D: Driver = DefaultDriver> {
     /// Similarly if we implement `Path`/source providing in the driver.
     /// Tools should also probably not concern themselves with that.
     pub driver_options: Options<D::RequiredArgs, D::OptionalArgs>,
-    pub options: Options<X::RequiredArgs<'a>, X::OptionalArgs>,
-}
-
-/// This type is owned by driver, but may contain references which outlive it.
-pub struct DriverControl<'a, X: Tool, D: Diagnostics<X>> {
-    diagnostics_emitter: DiagnosticsEmitter<'a, X, D>,
-    fscache: &'a mut HashMap<SourceId, (Cow<'a, path::Path>, String)>,
-}
-
-/// Returned by `DriverControl::take_owned`
-pub struct DriverControlOwned<'a, X: Tool, D: Diagnostics<X>> {
-    pub diagnostics_emitter: DiagnosticsEmitter<'a, X, D>,
-}
-
-/// Returned by `DriverControl::take_owned`
-pub struct DriverControlBorrowed<'a> {
-    fscache: &'a mut HashMap<SourceId, (Cow<'a, path::Path>, String)>,
-}
-
-/// Provided by the caller and used to construct a `DriverControl`.
-pub struct DriverEnv<'a, X, C>
-where
-    X: Tool,
-    C: CallerSpec<X>,
-{
-    // Pub because these need to be constructible from outside the crate.
-    pub tool: X,
-    pub diagnostics: &'a mut C::Diagnostics,
-    pub fscache: &'a mut HashMap<SourceId, (Cow<'a, path::Path>, String)>,
+    pub options: Options<X::RequiredArgs<'args>, X::OptionalArgs>,
 }
 
 /// Associated types provided by the caller.
@@ -142,15 +110,17 @@ pub enum DriverError {
 
 static LAST_SOURCE_ID: AtomicUsize = AtomicUsize::new(0);
 
-impl<'a, X: Tool> DriverConfig<'a, X> {
-    /// Builds a DriverControl, calling `build_with_driver_ctl`.
-    /// to return a tool specific `Output` type.
-    pub fn driver_init<'b: 'a, C: CallerSpec<X>>(
+impl<'args, X: Tool> DriverConfig<'args, X /* Driver = DefaultDriver */> {
+    ///
+    /// 1. Populates a `source_cache`
+    /// 2. Constructes a `Diagnostics emitter`.
+    /// 3. Passes everything above to the tool's implementation of `tool_init`.
+    pub fn driver_init<C: CallerSpec<X>>(
         mut self,
-        driver_env: DriverEnv<'b, X, SimpleSpec>,
+        diagnostics: &mut C::Diagnostics,
+        source_cache: &mut HashMap<SourceId, (path::PathBuf, String)>,
         caller_spec: C,
-    ) -> Result<X::Output<'a>, DriverError>
-where {
+    ) -> Result<X::Output, DriverError> {
         if let Some(source_path) = self.driver_options.optional.source_path.take() {
             let dir = cap_std::fs::Dir::open_ambient_dir(".", cap_std::ambient_authority())?;
             let mut file = dir.open(&source_path)?;
@@ -158,54 +128,38 @@ where {
             LAST_SOURCE_ID.fetch_add(1, Ordering::SeqCst);
             let source_id = SourceId(LAST_SOURCE_ID.load(Ordering::SeqCst));
             file.read_to_string(&mut source)?;
-            driver_env
-                .fscache
-                .insert(source_id, (source_path.into(), source));
+            source_cache.insert(source_id, (source_path, source));
         }
         if let Some((string_path_name, source_string)) = self.driver_options.optional.source_string
         {
             LAST_SOURCE_ID.fetch_add(1, Ordering::SeqCst);
             let source_id = SourceId(LAST_SOURCE_ID.load(Ordering::SeqCst));
-            driver_env
-                .fscache
-                .insert(source_id, (string_path_name.into(), source_string));
-        }
-        if let Some((stdin_name, mut source_stdin)) = self.driver_options.optional.source_stdin {
-            let mut source = String::new();
-            source_stdin.read_to_string(&mut source)?;
-            LAST_SOURCE_ID.fetch_add(1, Ordering::SeqCst);
-            let source_id = SourceId(LAST_SOURCE_ID.load(Ordering::SeqCst));
-            driver_env
-                .fscache
-                .insert(source_id, (stdin_name.into(), source));
+            source_cache.insert(source_id, (string_path_name, source_string));
         }
 
-        let driver_ctl = DriverControl {
-            diagnostics_emitter: DiagnosticsEmitter::new(self.tool, driver_env.diagnostics),
-            fscache: driver_env.fscache,
-        };
-        Ok(X::Output::build_with_driver_ctl(self.options, driver_ctl))
+        let emitter = DiagnosticsEmitter::new(self.tool, diagnostics);
+        Ok(X::Output::tool_init(self.options, source_cache, emitter))
     }
 }
 
 /// Sends ownership and observes emission of diagnostics from a tool.
-pub struct DiagnosticsEmitter<'a, X, D>
+pub struct DiagnosticsEmitter<'diag, X, D>
 where
     X: Tool,
     D: Diagnostics<X>,
 {
     observed_warning: bool,
     observed_error: bool,
-    diagnostics: &'a mut D,
+    diagnostics: &'diag mut D,
     tool: X,
 }
 
-impl<'a, X, D> DiagnosticsEmitter<'a, X, D>
+impl<'diag, X, D> DiagnosticsEmitter<'diag, X, D>
 where
     X: Tool,
     D: Diagnostics<X>,
 {
-    fn new<'r: 'a>(tool: X, diagnostics: &'r mut D) -> Self {
+    fn new(tool: X, diagnostics: &'diag mut D) -> Self {
         Self {
             observed_error: false,
             observed_warning: false,
@@ -246,10 +200,6 @@ pub struct DriverOptionalArgs {
     pub source_path: Option<path::PathBuf>,
     /// Uses a given name, and string.
     pub source_string: Option<(path::PathBuf, String)>,
-    /// Uses a given name, and the `Stdin`.
-    ///
-    /// Reads `Stdin` to completion upon driver initialization.
-    pub source_stdin: Option<(path::PathBuf, std::io::Stdin)>,
     #[doc(hidden)]
     _non_exhaustive: _unstable_api_::InternalDefault,
 }
@@ -287,36 +237,12 @@ impl<X: Tool> Diagnostics<X> for SimpleDiagnostics<X> {
     }
 }
 
-impl<X: Tool, R: Diagnostics<X>> Drop for DiagnosticsEmitter<'_, X, R> {
+impl<'diag, X: Tool, Diag> Drop for DiagnosticsEmitter<'diag, X, Diag>
+where
+    Diag: Diagnostics<X>,
+{
     fn drop(&mut self) {
         self.diagnostics.no_more_data()
-    }
-}
-
-impl<'a, X: Tool, D: Diagnostics<X>> DriverControl<'a, X, D> {
-    pub fn take_owned(self) -> (DriverControlOwned<'a, X, D>, DriverControlBorrowed<'a>) {
-        let owned = DriverControlOwned {
-            diagnostics_emitter: self.diagnostics_emitter,
-        };
-
-        let borrowed = DriverControlBorrowed {
-            fscache: self.fscache,
-        };
-        (owned, borrowed)
-    }
-}
-
-impl<'a> DriverControlBorrowed<'a> {
-    // SourceIds are unique even across multiple runs, and may be different
-    // for the same path, when the sources are loaded multiple times,
-    pub fn sources(&self) -> impl Iterator<Item = (SourceId, &str)> {
-        self.fscache
-            .iter()
-            .map(|(source_id, (_, src))| (*source_id, src.as_str()))
-    }
-
-    pub fn source_for_id(&self, source_id: SourceId) -> Option<&str> {
-        self.fscache.get(&source_id).map(|(_, src)| src.as_str())
     }
 }
 
@@ -384,7 +310,7 @@ mod tests {
         type Warning = YaccGrammarWarning;
         type OptionalArgs = YaccGrammarOptArgs;
         type RequiredArgs<'a> = YaccConfig;
-        type Output<'a> = GrammarASTWithValidationCertificate;
+        type Output = GrammarASTWithValidationCertificate;
     }
 
     #[derive(Debug)]
@@ -488,28 +414,22 @@ mod tests {
         }
     }
 
-    impl<'a> OutputWithDriverControl<'a, Yacc> for GrammarASTWithValidationCertificate
-    where
-        Self: 'a,
-    {
-        fn build_with_driver_ctl<R: Diagnostics<Yacc>>(
-            options: Options<<Yacc as Tool>::RequiredArgs<'a>, <Yacc as Tool>::OptionalArgs>,
-            ctl: DriverControl<Yacc, R>,
+    impl<'args> ToolInit<'args, Yacc> for GrammarASTWithValidationCertificate {
+        fn tool_init<R: Diagnostics<Yacc>>(
+            options: Options<<Yacc as Tool>::RequiredArgs<'args>, <Yacc as Tool>::OptionalArgs>,
+            source_cache: &HashMap<SourceId, (path::PathBuf, String)>,
+            mut emitter: DiagnosticsEmitter<Yacc, R>,
         ) -> GrammarASTWithValidationCertificate {
-            let (
-                DriverControlOwned {
-                    diagnostics_emitter: mut emitter,
-                },
-                ctl,
-            ) = ctl.take_owned();
-            if let Some((source_id, source)) = ctl.sources().next() {
-                if !source.is_empty() {
+            let source = source_cache.iter().next();
+            if let Some((source_id, (path, source))) = source {
+                if path == &path::PathBuf::from("Cargo.toml") {
                     emitter.emit_non_fatal_error(YaccGrammarError {
-                        source_id,
+                        source_id: *source_id,
                         kind: YaccGrammarErrorKind::Testing(vec![]),
                     });
                 }
             }
+
             println!("{:?}", options.required.yacc_kind,);
             // now at some time in the future.
             GrammarASTWithValidationCertificate {
@@ -521,20 +441,21 @@ mod tests {
 
     #[test]
     fn it_works() {
-        let mut diagnostics = SimpleDiagnostics::default();
-        let mut fscache = HashMap::new();
-        let driver_env = DriverEnv {
-            tool: Yacc,
-            diagnostics: &mut diagnostics,
-            fscache: &mut fscache,
-        };
-        // Test that the DriverEnv outlives the driver.
+        let mut diagnostics: SimpleDiagnostics<Yacc> = SimpleDiagnostics::default();
+        let mut source_cache = HashMap::new();
         {
             // Just pass in `Yacc` to avoid DriverConfig::<Yacc>`.
             let driver = DriverConfig {
                 driver: DefaultDriver,
                 tool: Yacc,
-                driver_options: (DriverOptions {}, Default::default()).into(),
+                driver_options: (
+                    DriverOptions {},
+                    DriverOptionalArgs {
+                        source_path: Some("Cargo.lock".into()),
+                        ..Default::default()
+                    },
+                )
+                    .into(),
                 options: (
                     YaccConfig {
                         yacc_kind: YaccKind::Grmtools,
@@ -543,7 +464,7 @@ mod tests {
                 )
                     .into(),
             }
-            .driver_init(driver_env, SimpleSpec)
+            .driver_init(&mut diagnostics, &mut source_cache, SimpleSpec)
             .unwrap();
             let _ast = driver.ast();
             let _grm = driver.grammar().unwrap();
@@ -557,14 +478,8 @@ mod tests {
     fn it_fails() {
         // These fields should perhaps be combined into something?
         let mut diagnostics = SimpleDiagnostics::default();
-        let mut fscache = HashMap::new();
+        let mut source_cache = HashMap::new();
 
-        let driver_env = DriverEnv {
-            tool: Yacc,
-            diagnostics: &mut diagnostics,
-            fscache: &mut fscache,
-        };
-        // Test that the DriverEnv outlives the driver.
         {
             // Just pass in `Yacc` to avoid DriverConfig::<Yacc>`.
             let driver = DriverConfig {
@@ -586,7 +501,7 @@ mod tests {
                 )
                     .into(),
             }
-            .driver_init(driver_env, SimpleSpec)
+            .driver_init(&mut diagnostics, &mut source_cache, SimpleSpec)
             .unwrap();
             let _ast = driver.ast();
             let _grm = driver.grammar().unwrap();
@@ -601,36 +516,23 @@ mod tests {
         impl Driver for () {
             type RequiredArgs = ();
             type OptionalArgs = bool;
-            type DriverEnvTy<'a, X: Tool, C: CallerSpec<X>> = () where C::Diagnostics: 'a;
         }
         // These fields should perhaps be combined into something?
         let mut diagnostics = SimpleDiagnostics::default();
-        let mut fscache = HashMap::new();
-
-        let driver_env = DriverEnv {
-            tool: Yacc,
-            diagnostics: &mut diagnostics,
-            fscache: &mut fscache,
-        };
-
-        impl<'a, X: Tool> DriverConfig<'a, X, ()> {
-            /// Builds a DriverControl, calling `build_with_driver_ctl`.
-            /// to return a tool specific `Output` type.
-            pub fn driver_init<'b: 'a, C: CallerSpec<X>>(
+        let mut source_cache = HashMap::new();
+        impl<X: Tool> DriverConfig<'_, X, ()> {
+            pub fn driver_init<C: CallerSpec<X>>(
                 self,
-                driver_env: DriverEnv<'b, X, SimpleSpec>,
+                source_cache: &mut HashMap<SourceId, (path::PathBuf, String)>,
+                diagnostics: &mut C::Diagnostics,
                 caller_spec: C,
-            ) -> Result<X::Output<'a>, DriverError>
-where {
-                let driver_ctl = DriverControl {
-                    diagnostics_emitter: DiagnosticsEmitter::new(self.tool, driver_env.diagnostics),
-                    fscache: driver_env.fscache,
-                };
-                Ok(X::Output::build_with_driver_ctl(self.options, driver_ctl))
+            ) -> Result<X::Output, DriverError> {
+                let emitter = DiagnosticsEmitter::new(self.tool, diagnostics);
+
+                Ok(X::Output::tool_init(self.options, source_cache, emitter))
             }
         }
 
-        // Test that the DriverEnv outlives the driver.
         {
             // Just pass in `Yacc` to avoid DriverConfig::<Yacc>`.
             let driver = DriverConfig {
@@ -645,7 +547,160 @@ where {
                 )
                     .into(),
             }
-            .driver_init(driver_env, SimpleSpec)
+            .driver_init(&mut source_cache, &mut diagnostics, SimpleSpec)
+            .unwrap();
+            let _ast = driver.ast();
+            let _grm = driver.grammar().unwrap();
+            #[allow(clippy::drop_non_drop)]
+            drop(driver);
+        }
+    }
+
+    #[derive(Copy, Clone)]
+    struct Lex;
+    struct NeverWarnings(Option<std::convert::Infallible>);
+    impl fmt::Display for NeverWarnings {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            Ok(())
+        }
+    }
+
+    #[derive(Debug)]
+    enum LexErrorKind {
+        Testing(Vec<Span>),
+    }
+
+    #[derive(Debug)]
+
+    struct LexError {
+        source_id: SourceId,
+        kind: LexErrorKind,
+    }
+    impl Error for LexError {}
+    impl SourceArtifact for LexError {
+        fn source_id(&self) -> SourceId {
+            self.source_id
+        }
+    }
+    impl Spanned for LexError {
+        fn spans(&self) -> &[Span] {
+            match &self.kind {
+                LexErrorKind::Testing(spans) => spans.as_slice(),
+            }
+        }
+        fn spanskind(&self) -> SpansKind {
+            match self.kind {
+                LexErrorKind::Testing(_) => SpansKind::Error,
+            }
+        }
+    }
+
+    impl Spanned for NeverWarnings {
+        fn spans(&self) -> &[Span] {
+            unimplemented!()
+        }
+
+        fn spanskind(&self) -> SpansKind {
+            unimplemented!()
+        }
+    }
+
+    impl fmt::Display for LexError {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            write!(f, "Lex error test")
+        }
+    }
+
+    struct LexOutput {}
+
+    impl<'args> ToolInit<'args, tests::Lex> for LexOutput {
+        fn tool_init<'diag, 'src, D: Diagnostics<Lex>>(
+            config: Options<(), ()>,
+            source_cache: &HashMap<SourceId, (path::PathBuf, String)>,
+            emitter: DiagnosticsEmitter<Lex, D>,
+        ) -> LexOutput {
+            LexOutput {}
+        }
+    }
+
+    impl Tool for Lex {
+        type Error = LexError;
+        type Warning = NeverWarnings;
+        // FIXME look at lex to figure out what all the below should be,
+        // This is mostly a test that we can populate the same source_cache
+        // from multiple tools.
+        type OptionalArgs = ();
+        type RequiredArgs<'a> = ();
+        type Output = LexOutput;
+    }
+
+    #[test]
+    fn lex_driver() {
+        // These fields should perhaps be combined into something?
+        let mut source_cache = HashMap::new();
+        {
+            let mut diagnostics = SimpleDiagnostics::default();
+            // Just pass in `Yacc` to avoid DriverConfig::<Yacc>`.
+            let driver = DriverConfig {
+                tool: Lex,
+                driver: (),
+                driver_options: ((), true).into(),
+                options: ((), ()).into(),
+            }
+            .driver_init(&mut source_cache, &mut diagnostics, SimpleSpec)
+            .unwrap();
+            #[allow(clippy::drop_non_drop)]
+            drop(driver);
+        }
+    }
+    #[test]
+    fn two_drivers_share_source_cache() {
+        let mut source_cache = HashMap::new();
+        {
+            let mut diagnostics = SimpleDiagnostics::default();
+            // Just pass in `Yacc` to avoid DriverConfig::<Yacc>`.
+            let driver = DriverConfig {
+                tool: Lex,
+                driver: DefaultDriver,
+                driver_options: (
+                    DriverOptions {},
+                    DriverOptionalArgs {
+                        source_path: Some("Cargo.lock".into()),
+                        ..Default::default()
+                    },
+                )
+                    .into(),
+                options: ((), ()).into(),
+            }
+            .driver_init(&mut diagnostics, &mut source_cache, SimpleSpec)
+            .unwrap();
+            #[allow(clippy::drop_non_drop)]
+            drop(driver);
+        }
+
+        {
+            let mut diagnostics = SimpleDiagnostics::default();
+            // Just pass in `Yacc` to avoid DriverConfig::<Yacc>`.
+            let driver = DriverConfig {
+                tool: Yacc,
+                driver: DefaultDriver,
+                driver_options: (
+                    DriverOptions {},
+                    DriverOptionalArgs {
+                        source_path: Some("Cargo.lock".into()),
+                        ..Default::default()
+                    },
+                )
+                    .into(),
+                options: (
+                    YaccConfig {
+                        yacc_kind: YaccKind::Grmtools,
+                    },
+                    Default::default(),
+                )
+                    .into(),
+            }
+            .driver_init(&mut diagnostics, &mut source_cache, SimpleSpec)
             .unwrap();
             let _ast = driver.ast();
             let _grm = driver.grammar().unwrap();
