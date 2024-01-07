@@ -1,6 +1,3 @@
-#![allow(dead_code)]
-#![allow(unused_variables)]
-
 /// I don't know how I feel about this, but it works.
 use std::io::Read as _;
 use std::sync::atomic::AtomicUsize;
@@ -162,6 +159,8 @@ where
     observed_warning: bool,
     observed_error: bool,
     diagnostics: &'diag mut D,
+    // This is primarily used to guide inference.
+    #[allow(unused)]
     tool: X,
 }
 
@@ -572,7 +571,7 @@ mod tests {
     struct Lex;
     struct NeverWarnings(Option<std::convert::Infallible>);
     impl fmt::Display for NeverWarnings {
-        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fn fmt(&self, _f: &mut fmt::Formatter) -> fmt::Result {
             Ok(())
         }
     }
@@ -627,9 +626,9 @@ mod tests {
 
     impl<'args> ToolInit<'args, tests::Lex> for LexOutput {
         fn tool_init<'diag, 'src, D: Diagnostics<Lex>>(
-            config: Options<(), ()>,
-            source_cache: SourceCache<'_>,
-            emitter: DiagnosticsEmitter<Lex, D>,
+            _config: Options<(), ()>,
+            _source_cache: SourceCache<'_>,
+            _emitter: DiagnosticsEmitter<Lex, D>,
         ) -> LexOutput {
             LexOutput {}
         }
