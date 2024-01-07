@@ -95,9 +95,7 @@ pub struct DriverControlBorrowed<'a> {
     fscache: &'a mut HashMap<SourceId, (Cow<'a, path::Path>, String)>,
 }
 
-/// Used to construct a `DriverControl`.
-///
-/// This structure should be specified by the caller however currently this is not very future-proof.
+/// Provided by the caller and used to construct a `DriverControl`.
 pub struct DriverEnv<'a, X, C>
 where
     X: Tool,
@@ -110,6 +108,11 @@ where
 }
 
 /// Associated types provided by the caller.
+///
+/// This one is pretty fragile, need to carefully think about what types/traits
+/// It should guarantee, since it shared across all drivers.
+///
+/// It likely wants a source cache trait for vfs reasons.
 pub trait CallerSpec<X: Tool> {
     type Diagnostics: Diagnostics<X>;
 }
