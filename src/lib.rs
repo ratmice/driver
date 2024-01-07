@@ -4,6 +4,9 @@ use std::sync::atomic::AtomicUsize;
 use std::{collections::HashMap, sync::atomic::Ordering};
 use std::{error, fmt, io, path};
 
+#[cfg(test)]
+mod test;
+
 mod _unstable_api_ {
 
     /// A sealed trait.
@@ -42,6 +45,7 @@ where
         config: Options<X::RequiredArgs<'args>, X::OptionalArgs>,
         source_cache: SourceCache<'_>,
         diagnostics: DiagnosticsEmitter<X, D>,
+        session: Session,
     ) -> X::Output;
 }
 
@@ -119,6 +123,24 @@ pub enum DriverError {
 
 static LAST_SOURCE_ID: AtomicUsize = AtomicUsize::new(0);
 
+pub struct Session {
+    source_ids: Vec<SourceId>,
+}
+
+/// A session is created during `driver_init`, and contains
+/// `SourceId`s for the documents loaded during driver init.
+///
+/// While `source_cache`, and `diagnostics` are allowed to
+/// persist across driver runs. `Session` is ephemeral.
+///
+/// This can be used to obtain the subset of the files asked to
+/// be loaded from the `source_cache`.
+impl Session {
+    pub fn source_ids(&self) -> impl Iterator<Item = SourceId> + '_ {
+        self.source_ids.iter().copied()
+    }
+}
+
 impl<'args, X: Tool> DriverConfig<'args, X /* Driver = DefaultDriver */> {
     ///
     /// 1. Populates a `source_cache`
@@ -129,6 +151,7 @@ impl<'args, X: Tool> DriverConfig<'args, X /* Driver = DefaultDriver */> {
         diagnostics: &mut D,
         source_cache: &mut HashMap<SourceId, (path::PathBuf, String)>,
     ) -> Result<X::Output, DriverError> {
+        let mut source_ids = Vec::new();
         if let Some(source_path) = self.driver_options.optional.source_path.take() {
             let dir = cap_std::fs::Dir::open_ambient_dir(".", cap_std::ambient_authority())?;
             let mut file = dir.open(&source_path)?;
@@ -137,16 +160,25 @@ impl<'args, X: Tool> DriverConfig<'args, X /* Driver = DefaultDriver */> {
             let source_id = SourceId(LAST_SOURCE_ID.load(Ordering::SeqCst));
             file.read_to_string(&mut source)?;
             source_cache.insert(source_id, (source_path, source));
+            source_ids.push(source_id);
         }
         if let Some((string_path_name, source_string)) = self.driver_options.optional.source_string
         {
             LAST_SOURCE_ID.fetch_add(1, Ordering::SeqCst);
             let source_id = SourceId(LAST_SOURCE_ID.load(Ordering::SeqCst));
             source_cache.insert(source_id, (string_path_name, source_string));
+            source_ids.push(source_id);
         }
         let source_cache = SourceCache { source_cache };
+
         let emitter = DiagnosticsEmitter::new(self.tool, diagnostics);
-        Ok(X::Output::tool_init(self.options, source_cache, emitter))
+        let session = Session { source_ids };
+        Ok(X::Output::tool_init(
+            self.options,
+            source_cache,
+            emitter,
+            session,
+        ))
     }
 }
 

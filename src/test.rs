@@ -12,7 +12,7 @@ mod tests {
         type Error = YaccGrammarError;
         type Warning = YaccGrammarWarning;
         type OptionalArgs = YaccGrammarOptArgs;
-        type RequiredArgs<'a> = YaccConfig;
+        type RequiredArgs<'a> = YaccArgs;
         type Output = GrammarASTWithValidationCertificate;
     }
 
@@ -30,7 +30,7 @@ mod tests {
         Eco,
     }
 
-    struct YaccConfig {
+    struct YaccArgs {
         yacc_kind: YaccKind,
     }
 
@@ -122,8 +122,9 @@ mod tests {
             options: Options<<Yacc as Tool>::RequiredArgs<'args>, <Yacc as Tool>::OptionalArgs>,
             source_cache: SourceCache<'_>,
             mut emitter: DiagnosticsEmitter<Yacc, R>,
+            session: Session,
         ) -> GrammarASTWithValidationCertificate {
-            let src_id = source_cache.source_ids().next();
+            let src_id = session.source_ids().next();
             if let Some(src_id) = src_id {
                 if let Some(path) = source_cache.path_for_id(src_id) {
                     if path == path::PathBuf::from("Cargo.toml") {
@@ -162,7 +163,7 @@ mod tests {
                 )
                     .into(),
                 options: (
-                    YaccConfig {
+                    YaccArgs {
                         yacc_kind: YaccKind::Grmtools,
                     },
                     Default::default(),
@@ -199,7 +200,7 @@ mod tests {
                 )
                     .into(),
                 options: (
-                    YaccConfig {
+                    YaccArgs {
                         yacc_kind: YaccKind::Grmtools,
                     },
                     Default::default(),
@@ -233,7 +234,13 @@ mod tests {
             ) -> Result<X::Output, DriverError> {
                 let emitter = DiagnosticsEmitter::new(self.tool, diagnostics);
                 let source_cache = SourceCache { source_cache };
-                Ok(X::Output::tool_init(self.options, source_cache, emitter))
+                let session = Session { source_ids: vec![] };
+                Ok(X::Output::tool_init(
+                    self.options,
+                    source_cache,
+                    emitter,
+                    session,
+                ))
             }
         }
 
@@ -244,7 +251,7 @@ mod tests {
                 driver: (),
                 driver_options: ((), true).into(),
                 options: (
-                    YaccConfig {
+                    YaccArgs {
                         yacc_kind: YaccKind::Grmtools,
                     },
                     Default::default(),
@@ -317,11 +324,12 @@ mod tests {
 
     struct LexOutput {}
 
-    impl<'args> ToolInit<'args, tests::Lex> for LexOutput {
+    impl<'args> ToolInit<'args, Lex> for LexOutput {
         fn tool_init<'diag, 'src, D: Diagnostics<Lex>>(
             _config: Options<(), ()>,
             _source_cache: SourceCache<'_>,
             _emitter: DiagnosticsEmitter<Lex, D>,
+            _session: Session,
         ) -> LexOutput {
             LexOutput {}
         }
@@ -397,7 +405,7 @@ mod tests {
                 )
                     .into(),
                 options: (
-                    YaccConfig {
+                    YaccArgs {
                         yacc_kind: YaccKind::Grmtools,
                     },
                     Default::default(),
