@@ -9,6 +9,10 @@ use std::{borrow::Cow, collections::HashMap, sync::atomic::Ordering};
 use std::{error, fmt, io, path};
 
 mod _unstable_api_ {
+
+    /// A sealed trait.
+    pub trait InternalTrait {}
+
     #[derive(Default)]
     pub struct InternalDefault;
 }
@@ -48,13 +52,15 @@ pub struct DefaultDriver;
 /// A Default driver implementation,
 ///
 /// Has required, optional arguments and specifies an environment
-pub trait Driver {
+pub trait Driver: _unstable_api_::InternalTrait {
     type RequiredArgs;
     type OptionalArgs: Default;
     type DriverEnvTy<'a, X: Tool, C: CallerSpec<X>>
     where
         C::Diagnostics: 'a;
 }
+
+impl _unstable_api_::InternalTrait for DefaultDriver {}
 
 impl Driver for DefaultDriver {
     type OptionalArgs = DriverOptionalArgs;
@@ -589,7 +595,9 @@ mod tests {
         }
     }
 
+    #[test]
     fn unit_driver() {
+        impl _unstable_api_::InternalTrait for () {}
         impl Driver for () {
             type RequiredArgs = ();
             type OptionalArgs = bool;
