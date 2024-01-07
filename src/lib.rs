@@ -41,11 +41,15 @@ where
 }
 
 pub struct DefaultDriver;
-/// A set of configuration options for a driver.
+/// A Default driver implementation,
+///
+/// Has required, optional arguments and specifies an environment
 pub trait Driver {
     type RequiredArgs;
     type OptionalArgs: Default;
-    type DriverEnvTy<'a, X: Tool, C: CallerSpec<X>> where C::Diagnostics: 'a;
+    type DriverEnvTy<'a, X: Tool, C: CallerSpec<X>>
+    where
+        C::Diagnostics: 'a;
 }
 
 impl Driver for DefaultDriver {
@@ -55,13 +59,15 @@ impl Driver for DefaultDriver {
 }
 
 /// Used to configure and initialize a driver for a tool.
-/// Containing the the tool to run which must implement `Tool`,
-/// `driver_options` for the driver, and `options` for the tool.
+///
+/// Contains the tool to run which must implement `Tool`,
+/// `driver_options` for itself, and `options` for the tool.
 ///
 /// Fields are public so that they are constructable by the caller.
 pub struct DriverConfig<'a, X: Tool, D: Driver = DefaultDriver> {
     /// This is mostly here to guide inference, and generally would be a unitary type.
     pub tool: X,
+    pub driver: D,
     /// Options which are specific to the driver and kept hidden
     /// from the tool. For instance whether warnings are errors.
     /// Since `tools` route errors through the driver, tools should
@@ -497,6 +503,7 @@ mod tests {
         {
             // Just pass in `Yacc` to avoid DriverConfig::<Yacc>`.
             let driver = DriverConfig {
+                driver: DefaultDriver,
                 tool: Yacc,
                 driver_options: (DriverOptions {}, Default::default()).into(),
                 options: (
@@ -533,6 +540,7 @@ mod tests {
             // Just pass in `Yacc` to avoid DriverConfig::<Yacc>`.
             let driver = DriverConfig {
                 tool: Yacc,
+                driver: DefaultDriver,
                 driver_options: (
                     DriverOptions {},
                     DriverOptionalArgs {
@@ -541,6 +549,63 @@ mod tests {
                     },
                 )
                     .into(),
+                options: (
+                    YaccConfig {
+                        yacc_kind: YaccKind::Grmtools,
+                    },
+                    Default::default(),
+                )
+                    .into(),
+            }
+            .driver_init(driver_env, SimpleSpec)
+            .unwrap();
+            let _ast = driver.ast();
+            let _grm = driver.grammar().unwrap();
+            #[allow(clippy::drop_non_drop)]
+            drop(driver);
+        }
+    }
+
+    fn unit_driver() {
+        impl Driver for () {
+            type RequiredArgs = ();
+            type OptionalArgs = bool;
+            type DriverEnvTy<'a, X: Tool, C: CallerSpec<X>> = () where C::Diagnostics: 'a;
+        }
+        // These fields should perhaps be combined into something?
+        let mut diagnostics = SimpleDiagnostics::default();
+        let mut fscache = HashMap::new();
+
+        let driver_env = DriverEnv {
+            tool: Yacc,
+            diagnostics: &mut diagnostics,
+            fscache: &mut fscache,
+        };
+
+        impl<'a, X: Tool> DriverConfig<'a, X, ()> {
+            /// Builds a DriverControl, calling `build_with_driver_ctl`.
+            /// to return a tool specific `Output` type.
+            pub fn driver_init<'b: 'a, C: CallerSpec<X>>(
+                self,
+                driver_env: DriverEnv<'b, X, SimpleSpec>,
+                caller_spec: C,
+            ) -> Result<X::Output<'a>, DriverError>
+where {
+                let driver_ctl = DriverControl {
+                    diagnostics_emitter: DiagnosticsEmitter::new(self.tool, driver_env.diagnostics),
+                    fscache: driver_env.fscache,
+                };
+                Ok(X::Output::build_with_driver_ctl(self.options, driver_ctl))
+            }
+        }
+
+        // Test that the DriverEnv outlives the driver.
+        {
+            // Just pass in `Yacc` to avoid DriverConfig::<Yacc>`.
+            let driver = DriverConfig {
+                tool: Yacc,
+                driver: (),
+                driver_options: ((), true).into(),
                 options: (
                     YaccConfig {
                         yacc_kind: YaccKind::Grmtools,
