@@ -43,7 +43,7 @@ where
 {
     fn tool_init<D: Diagnostics<X>>(
         config: Options<X::RequiredArgs<'args>, X::OptionalArgs>,
-        source_cache: &HashMap<SourceId, (path::PathBuf, String)>,
+        source_cache: SourceCache<'_>,
         diagnostics: DiagnosticsEmitter<X, D>,
     ) -> X::Output;
 }
@@ -62,6 +62,34 @@ impl _unstable_api_::InternalTrait for DefaultDriver {}
 impl Driver for DefaultDriver {
     type OptionalArgs = DriverOptionalArgs;
     type RequiredArgs = DriverOptions;
+}
+
+pub struct SourceCache<'a> {
+    source_cache: &'a mut HashMap<SourceId, (std::path::PathBuf, String)>,
+}
+
+impl<'src> SourceCache<'src> {
+    pub fn source_ids(&self) -> impl Iterator<Item = SourceId> + '_ {
+        self.source_cache.iter().map(|(src_id, _)| *src_id)
+    }
+
+    pub fn source_for_id(&self, src_id: SourceId) -> Option<&str> {
+        self.source_cache.get(&src_id).map(|(_, src)| src.as_str())
+    }
+
+    pub fn path_for_id(&self, src_id: SourceId) -> Option<&path::Path> {
+        self.source_cache
+            .get(&src_id)
+            .map(|(path, _)| path.as_path())
+    }
+
+    /// This should allow us to populate the source cache with generated code.
+    pub fn add_source(&mut self, path: path::PathBuf, src: String) -> SourceId {
+        LAST_SOURCE_ID.fetch_add(1, Ordering::SeqCst);
+        let source_id = SourceId(LAST_SOURCE_ID.load(Ordering::SeqCst));
+        self.source_cache.insert(source_id, (path, src));
+        source_id
+    }
 }
 
 /// Used to configure and initialize a driver for a tool.
@@ -136,7 +164,7 @@ impl<'args, X: Tool> DriverConfig<'args, X /* Driver = DefaultDriver */> {
             let source_id = SourceId(LAST_SOURCE_ID.load(Ordering::SeqCst));
             source_cache.insert(source_id, (string_path_name, source_string));
         }
-
+        let source_cache = SourceCache { source_cache };
         let emitter = DiagnosticsEmitter::new(self.tool, diagnostics);
         Ok(X::Output::tool_init(self.options, source_cache, emitter))
     }
@@ -417,16 +445,18 @@ mod tests {
     impl<'args> ToolInit<'args, Yacc> for GrammarASTWithValidationCertificate {
         fn tool_init<R: Diagnostics<Yacc>>(
             options: Options<<Yacc as Tool>::RequiredArgs<'args>, <Yacc as Tool>::OptionalArgs>,
-            source_cache: &HashMap<SourceId, (path::PathBuf, String)>,
+            source_cache: SourceCache<'_>,
             mut emitter: DiagnosticsEmitter<Yacc, R>,
         ) -> GrammarASTWithValidationCertificate {
-            let source = source_cache.iter().next();
-            if let Some((source_id, (path, source))) = source {
-                if path == &path::PathBuf::from("Cargo.toml") {
-                    emitter.emit_non_fatal_error(YaccGrammarError {
-                        source_id: *source_id,
-                        kind: YaccGrammarErrorKind::Testing(vec![]),
-                    });
+            let src_id = source_cache.source_ids().next();
+            if let Some(src_id) = src_id {
+                if let Some(path) = source_cache.path_for_id(src_id) {
+                    if path == path::PathBuf::from("Cargo.toml") {
+                        emitter.emit_non_fatal_error(YaccGrammarError {
+                            source_id: src_id,
+                            kind: YaccGrammarErrorKind::Testing(vec![]),
+                        });
+                    }
                 }
             }
 
@@ -528,7 +558,7 @@ mod tests {
                 caller_spec: C,
             ) -> Result<X::Output, DriverError> {
                 let emitter = DiagnosticsEmitter::new(self.tool, diagnostics);
-
+                let source_cache = SourceCache { source_cache };
                 Ok(X::Output::tool_init(self.options, source_cache, emitter))
             }
         }
@@ -616,7 +646,7 @@ mod tests {
     impl<'args> ToolInit<'args, tests::Lex> for LexOutput {
         fn tool_init<'diag, 'src, D: Diagnostics<Lex>>(
             config: Options<(), ()>,
-            source_cache: &HashMap<SourceId, (path::PathBuf, String)>,
+            source_cache: SourceCache<'_>,
             emitter: DiagnosticsEmitter<Lex, D>,
         ) -> LexOutput {
             LexOutput {}
