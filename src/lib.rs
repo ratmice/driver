@@ -98,7 +98,11 @@ impl<'src> SourceCache<'src> {
 /// `driver_options` for itself, and `options` for the tool.
 ///
 /// Fields are public so that they are constructable by the caller.
-pub struct Driver<X: Tool, D: DriverArgsSelection = DefaultDriver> {
+pub struct Driver<X, TOpts, D: DriverArgsSelection = DefaultDriver>
+where
+    X: Tool,
+    TOpts: Into<Options<X::RequiredArgs, X::OptionalArgs>>,
+{
     /// This is mostly here to guide inference, and generally would be a unitary type.
     pub tool: X,
     pub driver: D,
@@ -111,7 +115,7 @@ pub struct Driver<X: Tool, D: DriverArgsSelection = DefaultDriver> {
     /// Tools should also probably not concern themselves with that.
     pub driver_options: Options<D::RequiredArgs, D::OptionalArgs>,
     // Can this be Into<...>?
-    pub options: Options<X::RequiredArgs, X::OptionalArgs>,
+    pub options: TOpts,
 }
 
 /// Errors occurred by the driver.
@@ -141,7 +145,11 @@ impl Session {
     }
 }
 
-impl<X: Tool> Driver<X, DefaultDriver> {
+impl<X, TOpts> Driver<X, TOpts, DefaultDriver>
+where
+    X: Tool,
+    TOpts: Into<Options<X::RequiredArgs, X::OptionalArgs>>,
+{
     ///
     /// 1. Populates a `source_cache`
     /// 2. Constructes a `Diagnostics emitter`.
@@ -181,7 +189,7 @@ impl<X: Tool> Driver<X, DefaultDriver> {
         let emitter = DiagnosticsEmitter::new(self.tool, diagnostics);
         let session = Session { source_ids };
         Ok(X::Output::tool_init(
-            self.options,
+            self.options.into(),
             source_cache,
             emitter,
             session,

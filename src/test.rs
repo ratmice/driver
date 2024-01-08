@@ -176,8 +176,7 @@ mod tests {
                         yacc_kind: YaccKind::Grmtools,
                     },
                     Default::default(),
-                )
-                    .into(),
+                ),
             }
             .driver_init(&mut diagnostics, &mut source_cache)
             .unwrap();
@@ -213,8 +212,7 @@ mod tests {
                         yacc_kind: YaccKind::Grmtools,
                     },
                     Default::default(),
-                )
-                    .into(),
+                ),
             }
             .driver_init(&mut diagnostics, &mut source_cache)
             .unwrap();
@@ -243,7 +241,11 @@ mod tests {
         //
         // So in addition to changing the `DriverArgsSelection`,
         // they can differ in their initialization as well.
-        impl<X: Tool> Driver<X, ()> {
+        impl<X: Tool, TOpts> Driver<X, TOpts, ()>
+        where
+            X: Tool,
+            TOpts: Into<Options<X::RequiredArgs, X::OptionalArgs>>,
+        {
             pub fn driver_init<D: Diagnostics<X>>(
                 self,
                 source_cache: &mut HashMap<SourceId, (path::PathBuf, String)>,
@@ -254,7 +256,7 @@ mod tests {
                 let source_cache = SourceCache { source_cache };
                 let session = Session { source_ids: vec![] };
                 Ok(X::Output::tool_init(
-                    self.options,
+                    self.options.into(),
                     source_cache,
                     emitter,
                     session,
@@ -273,8 +275,7 @@ mod tests {
                         yacc_kind: YaccKind::Grmtools,
                     },
                     Default::default(),
-                )
-                    .into(),
+                ),
             }
             .driver_init(&mut source_cache, &mut diagnostics, ())
             .unwrap();
@@ -380,7 +381,7 @@ mod tests {
                 tool: Lex,
                 driver: (),
                 driver_options: ((), true).into(),
-                options: ((), ()).into(),
+                options: ((), ()),
             }
             .driver_init(&mut source_cache, &mut diagnostics, ())
             .unwrap();
@@ -405,7 +406,7 @@ mod tests {
                     },
                 )
                     .into(),
-                options: ((), ()).into(),
+                options: ((), ()),
             }
             .driver_init(&mut diagnostics, &mut source_cache)
             .unwrap();
@@ -432,8 +433,7 @@ mod tests {
                         yacc_kind: YaccKind::Grmtools,
                     },
                     Default::default(),
-                )
-                    .into(),
+                ),
             }
             .driver_init(&mut diagnostics, &mut source_cache)
             .unwrap();
