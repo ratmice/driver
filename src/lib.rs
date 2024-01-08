@@ -8,7 +8,6 @@ use std::{error, fmt, io, path};
 mod test;
 
 mod _unstable_api_ {
-
     /// A sealed trait.
     pub trait InternalTrait {}
 
@@ -44,7 +43,7 @@ where
     fn tool_init<D: Diagnostics<X>>(
         config: Options<X::RequiredArgs<'args>, X::OptionalArgs>,
         source_cache: SourceCache<'_>,
-        diagnostics: DiagnosticsEmitter<X, D>,
+        emitter: DiagnosticsEmitter<X, D>,
         session: Session,
     ) -> X::Output;
 }
@@ -141,7 +140,7 @@ impl Session {
     }
 }
 
-impl<'args, X: Tool> Driver<'args, X /* Driver = DefaultDriver */> {
+impl<'args, X: Tool> Driver<'args, X, DefaultDriver> {
     ///
     /// 1. Populates a `source_cache`
     /// 2. Constructes a `Diagnostics emitter`.

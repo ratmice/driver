@@ -235,11 +235,20 @@ mod tests {
         // These fields should perhaps be combined into something?
         let mut diagnostics = SimpleDiagnostics::default();
         let mut source_cache = HashMap::new();
+        // Note that the args here differ from those of the default `driver_init`.
+        // Not for any reason, just to highlight that there can be multiple impls
+        // for this struct due to the default type instace. The other being:
+        //
+        // impl<X: Tool> Driver<'_, X, DefaultDriver>.
+        //
+        // So in addition to changing the `DriverArgsSelection`,
+        // they can differ in their initialization as well.
         impl<X: Tool> Driver<'_, X, ()> {
             pub fn driver_init<D: Diagnostics<X>>(
                 self,
                 source_cache: &mut HashMap<SourceId, (path::PathBuf, String)>,
                 diagnostics: &mut D,
+                _extra_param: (),
             ) -> Result<X::Output, DriverError> {
                 let emitter = DiagnosticsEmitter::new(self.tool, diagnostics);
                 let source_cache = SourceCache { source_cache };
@@ -267,7 +276,7 @@ mod tests {
                 )
                     .into(),
             }
-            .driver_init(&mut source_cache, &mut diagnostics)
+            .driver_init(&mut source_cache, &mut diagnostics, ())
             .unwrap();
             let _ast = driver.ast();
             let _grm = driver.grammar().unwrap();
@@ -373,7 +382,7 @@ mod tests {
                 driver_options: ((), true).into(),
                 options: ((), ()).into(),
             }
-            .driver_init(&mut source_cache, &mut diagnostics)
+            .driver_init(&mut source_cache, &mut diagnostics, ())
             .unwrap();
             #[allow(clippy::drop_non_drop)]
             drop(driver);
