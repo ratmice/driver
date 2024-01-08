@@ -32,10 +32,15 @@ where
 }
 
 pub trait Args {
-    /// A tool specific type for arguments that must be given.
-    type RequiredArgs;
-    /// A tool specific type for arguments which derive `Default`
+    /// A type for arguments that must be given.
+    type RequiredArgs<'a>;
+    /// A type for arguments which derive `Default`
     type OptionalArgs: Default;
+}
+pub trait DriverTypes<X: Tool>: Args {
+    type Output<T>
+    where
+        T: Tool;
 }
 
 /// Trait for constructing tool output.
@@ -44,22 +49,31 @@ where
     X: Tool,
 {
     fn tool_init<D: Diagnostics<X>>(
-        config: Params<X::RequiredArgs, X::OptionalArgs>,
+        config: Params<X::RequiredArgs<'_>, X::OptionalArgs>,
         source_cache: SourceCache<'_>,
         emitter: DiagnosticsEmitter<X, D>,
-        session: Session,
-    ) -> X::Output;
+        session: &Session,
+    ) -> Self;
+}
+
+pub struct DriverOutput<X: Tool> {
+    pub session: Session,
+    pub output: X::Output,
 }
 
 #[doc(hidden)]
 pub struct DefaultDriver;
 
 #[doc(hidden)]
-pub trait DriverSelector: _unstable_api_::InternalTrait + Args {}
+pub trait DriverSelector: _unstable_api_::InternalTrait {}
 impl _unstable_api_::InternalTrait for DefaultDriver {}
 impl DriverSelector for DefaultDriver {}
+impl<X: Tool> DriverTypes<X> for DefaultDriver {
+    type Output<T> = DriverOutput<T> where T: Tool;
+}
+
 impl Args for DefaultDriver {
-    type RequiredArgs = DriverArgs;
+    type RequiredArgs<'a> = DriverArgs;
     type OptionalArgs = DriverOptionalArgs;
 }
 
@@ -97,11 +111,11 @@ impl<'src> SourceCache<'src> {
 /// `driver_options` for itself, and `options` for the tool.
 ///
 /// Fields are public so that they are constructable by the caller.
-pub struct Driver<X, DArgs, TArgs, D: DriverSelector + Args = DefaultDriver>
+pub struct Driver<X, DArgs, TArgs, D: DriverSelector + DriverTypes<X> = DefaultDriver>
 where
     X: Tool,
-    DArgs: Into<Params<D::RequiredArgs, D::OptionalArgs>>,
-    TArgs: Into<Params<X::RequiredArgs, X::OptionalArgs>>,
+    DArgs: for<'x> Into<Params<D::RequiredArgs<'x>, D::OptionalArgs>>,
+    TArgs: for<'d> Into<Params<X::RequiredArgs<'d>, X::OptionalArgs>>,
 {
     /// This is mostly here to guide inference, and generally would be a unitary type.
     pub tool: X,
@@ -117,11 +131,12 @@ where
 impl<X, DArgs, TArgs> Driver<X, DArgs, TArgs, DefaultDriver>
 where
     X: Tool,
-    DArgs: Into<Params<DriverArgs, DriverOptionalArgs>>,
-    TArgs: Into<Params<X::RequiredArgs, X::OptionalArgs>>,
+    DArgs: for<'d> Into<Params<DriverArgs, DriverOptionalArgs>>,
+    TArgs: for<'x> Into<Params<X::RequiredArgs<'x>, X::OptionalArgs>>,
+    DefaultDriver: DriverTypes<X>,
     // This bound is not needed, but perhaps informative.
-    DefaultDriver:
-        DriverSelector + Args<RequiredArgs = DriverArgs, OptionalArgs = DriverOptionalArgs>,
+    DefaultDriver: DriverSelector
+        + for<'d> Args<RequiredArgs<'d> = DriverArgs, OptionalArgs = DriverOptionalArgs>,
 {
     ///
     /// 1. Populates a `source_cache`
@@ -131,7 +146,7 @@ where
         self,
         diagnostics: &mut D,
         source_cache: &mut HashMap<SourceId, (path::PathBuf, String)>,
-    ) -> Result<X::Output, DriverError> {
+    ) -> Result<DriverOutput<X>, DriverError> {
         let mut driver_options = self.driver_args.into();
         let mut source_ids = Vec::new();
         if let Some(source_path) = driver_options.optional.source_path.take() {
@@ -161,12 +176,8 @@ where
 
         let emitter = DiagnosticsEmitter::new(self.tool, diagnostics);
         let session = Session { source_ids };
-        Ok(X::Output::tool_init(
-            self.tool_args.into(),
-            source_cache,
-            emitter,
-            session,
-        ))
+        let output = X::Output::tool_init(self.tool_args.into(), source_cache, emitter, &session);
+        Ok(DriverOutput { output, session })
     }
 }
 /// Errors occurred by the driver.
@@ -276,7 +287,6 @@ pub struct DriverOptionalArgs {
     /// Setting this to any other directory will cause
     /// lookups to be done relative to that path instead.
     pub relative_to_path: Option<path::PathBuf>,
-
     #[doc(hidden)]
     pub _non_exhaustive: _unstable_api_::InternalDefault,
 }

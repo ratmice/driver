@@ -14,7 +14,7 @@ mod tests {
     }
     impl Args for Yacc {
         type OptionalArgs = YaccGrammarOptArgs;
-        type RequiredArgs = YaccArgs;
+        type RequiredArgs<'x> = YaccArgs;
     }
 
     #[derive(Debug)]
@@ -130,10 +130,10 @@ mod tests {
 
     impl ToolInit<Yacc> for GrammarASTWithValidationCertificate {
         fn tool_init<R: Diagnostics<Yacc>>(
-            options: Params<<Yacc as Args>::RequiredArgs, <Yacc as Args>::OptionalArgs>,
+            options: Params<<Yacc as Args>::RequiredArgs<'_>, <Yacc as Args>::OptionalArgs>,
             source_cache: SourceCache<'_>,
             mut emitter: DiagnosticsEmitter<Yacc, R>,
-            session: Session,
+            session: &Session,
         ) -> GrammarASTWithValidationCertificate {
             let src_id = session.source_ids().next();
             if let Some(src_id) = src_id {
@@ -181,8 +181,9 @@ mod tests {
             }
             .driver_init(&mut diagnostics, &mut source_cache)
             .unwrap();
-            let _ast = driver.ast();
-            let _grm = driver.grammar().unwrap();
+            let _session = &driver.session;
+            let _ast = driver.output.ast();
+            let _grm = driver.output.grammar().unwrap();
             #[allow(clippy::drop_non_drop)]
             drop(driver);
         }
@@ -216,8 +217,8 @@ mod tests {
             }
             .driver_init(&mut diagnostics, &mut source_cache)
             .unwrap();
-            let _ast = driver.ast();
-            let _grm = driver.grammar().unwrap();
+            let _ast = driver.output.ast();
+            let _grm = driver.output.grammar().unwrap();
             #[allow(clippy::drop_non_drop)]
             drop(driver);
         }
@@ -228,8 +229,12 @@ mod tests {
         impl _unstable_api_::InternalTrait for () {}
         impl DriverSelector for () {}
         impl Args for () {
-            type RequiredArgs = ();
+            type RequiredArgs<'x> = ();
             type OptionalArgs = bool;
+        }
+
+        impl<X: Tool> DriverTypes<X> for () {
+            type Output<T> = () where T: Tool;
         }
         // These fields should perhaps be combined into something?
         let mut diagnostics = SimpleDiagnostics::default();
@@ -246,7 +251,7 @@ mod tests {
         where
             X: Tool,
             DArgs: Into<Params<(), bool>>,
-            TArgs: Into<Params<X::RequiredArgs, X::OptionalArgs>>,
+            TArgs: for<'x> Into<Params<X::RequiredArgs<'x>, X::OptionalArgs>>,
         {
             pub fn driver_init<D: Diagnostics<X>>(
                 self,
@@ -262,7 +267,7 @@ mod tests {
                     self.tool_args.into(),
                     source_cache,
                     emitter,
-                    session,
+                    &session,
                 ))
             }
         }
@@ -356,7 +361,7 @@ mod tests {
             _config: Params<(), ()>,
             _source_cache: SourceCache<'_>,
             _emitter: DiagnosticsEmitter<Lex, D>,
-            _session: Session,
+            _session: &Session,
         ) -> LexOutput {
             LexOutput {}
         }
@@ -371,7 +376,7 @@ mod tests {
     impl Args for Lex {
         // FIXME look at lex args.
         type OptionalArgs = ();
-        type RequiredArgs = ();
+        type RequiredArgs<'x> = ();
     }
 
     #[test]
@@ -439,8 +444,8 @@ mod tests {
             }
             .driver_init(&mut diagnostics, &mut source_cache)
             .unwrap();
-            let _ast = driver.ast();
-            let _grm = driver.grammar().unwrap();
+            let _ast = driver.output.ast();
+            let _grm = driver.output.grammar().unwrap();
             #[allow(clippy::drop_non_drop)]
             drop(driver);
         }
