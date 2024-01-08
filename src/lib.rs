@@ -97,7 +97,7 @@ impl<'src> SourceCache<'src> {
 /// `driver_options` for itself, and `options` for the tool.
 ///
 /// Fields are public so that they are constructable by the caller.
-pub struct Driver<X, TArgs, DArgs, D: DriverSelector + Args = DefaultDriver>
+pub struct Driver<X, DArgs, TArgs, D: DriverSelector + Args = DefaultDriver>
 where
     X: Tool,
     DArgs: Into<Params<D::RequiredArgs, D::OptionalArgs>>,
@@ -114,11 +114,11 @@ where
     pub tool_args: TArgs,
 }
 
-impl<X, TOpts, DOpts> Driver<X, TOpts, DOpts, DefaultDriver>
+impl<X, DArgs, TArgs> Driver<X, DArgs, TArgs, DefaultDriver>
 where
     X: Tool,
-    DOpts: Into<Params<DriverArgs, DriverOptionalArgs>>,
-    TOpts: Into<Params<X::RequiredArgs, X::OptionalArgs>>,
+    DArgs: Into<Params<DriverArgs, DriverOptionalArgs>>,
+    TArgs: Into<Params<X::RequiredArgs, X::OptionalArgs>>,
     // This bound is not needed, but perhaps informative.
     DefaultDriver:
         DriverSelector + Args<RequiredArgs = DriverArgs, OptionalArgs = DriverOptionalArgs>,

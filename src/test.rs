@@ -242,11 +242,11 @@ mod tests {
         //
         // So in addition to changing the `DriverArgsSelection`,
         // they can differ in their initialization as well.
-        impl<X, TOpts, DOpts> Driver<X, TOpts, DOpts, ()>
+        impl<X, DArgs, TArgs> Driver<X, DArgs, TArgs, ()>
         where
             X: Tool,
-            DOpts: Into<Params<(), bool>>,
-            TOpts: Into<Params<X::RequiredArgs, X::OptionalArgs>>,
+            DArgs: Into<Params<(), bool>>,
+            TArgs: Into<Params<X::RequiredArgs, X::OptionalArgs>>,
         {
             pub fn driver_init<D: Diagnostics<X>>(
                 self,
@@ -254,7 +254,7 @@ mod tests {
                 diagnostics: &mut D,
                 _extra_param: (),
             ) -> Result<X::Output, DriverError> {
-                let _driver_opts: Params<(), bool> = self.driver_args.into();
+                let _driver_args: Params<(), bool> = self.driver_args.into();
                 let emitter = DiagnosticsEmitter::new(self.tool, diagnostics);
                 let source_cache = SourceCache { source_cache };
                 let session = Session { source_ids: vec![] };
