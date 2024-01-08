@@ -97,10 +97,11 @@ impl<'src> SourceCache<'src> {
     }
 
     /// This should allow us to populate the source cache with generated code.
-    pub fn add_source(&mut self, path: path::PathBuf, src: String) -> SourceId {
+    pub fn add_source(&mut self, session: &mut Session, path: path::PathBuf, src: String) -> SourceId {
         LAST_SOURCE_ID.fetch_add(1, Ordering::SeqCst);
         let source_id = SourceId(LAST_SOURCE_ID.load(Ordering::SeqCst));
         self.source_cache.insert(source_id, (path, src));
+        session.add_source_id(source_id);
         source_id
     }
 }
@@ -148,7 +149,7 @@ where
         source_cache: &mut HashMap<SourceId, (path::PathBuf, String)>,
     ) -> Result<DriverOutput<X>, DriverError> {
         let mut driver_options = self.driver_args.into();
-        let mut source_ids = Vec::new();
+        let mut source_ids_from_driver = Vec::new();
         if let Some(source_path) = driver_options.optional.source_path.take() {
             let dir = cap_std::fs::Dir::open_ambient_dir(
                 if let Some(path) = driver_options.optional.relative_to_path {
@@ -164,18 +165,18 @@ where
             let source_id = SourceId(LAST_SOURCE_ID.load(Ordering::SeqCst));
             file.read_to_string(&mut source)?;
             source_cache.insert(source_id, (source_path, source));
-            source_ids.push(source_id);
+            source_ids_from_driver.push(source_id);
         }
         if let Some((string_path_name, source_string)) = driver_options.optional.source_string {
             LAST_SOURCE_ID.fetch_add(1, Ordering::SeqCst);
             let source_id = SourceId(LAST_SOURCE_ID.load(Ordering::SeqCst));
             source_cache.insert(source_id, (string_path_name, source_string));
-            source_ids.push(source_id);
+            source_ids_from_driver.push(source_id);
         }
         let source_cache = SourceCache { source_cache };
 
         let emitter = DiagnosticsEmitter::new(self.tool, diagnostics);
-        let mut session = Session { source_ids };
+        let mut session = Session { source_ids_from_driver, source_ids_from_tool: vec![] };
         let output = X::Output::tool_init(self.tool_args.into(), source_cache, emitter, &mut session);
         Ok(DriverOutput { output, session })
     }
@@ -190,7 +191,8 @@ pub enum DriverError {
 static LAST_SOURCE_ID: AtomicUsize = AtomicUsize::new(0);
 
 pub struct Session {
-    source_ids: Vec<SourceId>,
+    source_ids_from_driver: Vec<SourceId>,
+    source_ids_from_tool: Vec<SourceId>,
 }
 
 /// A session is created during `driver_init`, and contains
@@ -202,8 +204,16 @@ pub struct Session {
 /// This can be used to obtain the subset of the files asked to
 /// be loaded from the `source_cache`.
 impl Session {
-    pub fn source_ids(&self) -> impl Iterator<Item = SourceId> + '_ {
-        self.source_ids.iter().copied()
+    /// Any new source id's produced by the driver before running the tool.
+    pub fn loaded_source_ids(&self) -> impl Iterator<Item = SourceId> + '_ {
+        self.source_ids_from_driver.iter().copied()
+    }
+    /// Any new source id's produced by the tool through `SourceCache::add_source`.
+    pub fn added_source_ids(&self) -> impl Iterator<Item = SourceId> + '_ {
+        self.source_ids_from_driver.iter().copied()
+    }
+    fn add_source_id(&mut self, src_id: SourceId) {
+        self.source_ids_from_tool.push(src_id);
     }
 }
 
