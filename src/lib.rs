@@ -19,7 +19,7 @@ pub trait SourceArtifact {
     fn source_id(&self) -> SourceId;
 }
 
-pub trait Tool
+pub trait Tool: Args
 where
     Self: Sized + Copy,
 {
@@ -29,6 +29,9 @@ where
     type Warning: SourceArtifact + Spanned;
     /// The type output by the tool.
     type Output: ToolInit<Self>;
+}
+
+pub trait Args {
     /// A tool specific type for arguments must be given.
     type RequiredArgs;
     /// A tool specific type for arguments which derive `Default`
@@ -52,16 +55,12 @@ where
 pub struct DefaultDriver;
 
 #[doc(hidden)]
-pub trait DriverArgsSelection: _unstable_api_::InternalTrait {
-    type RequiredArgs;
-    type OptionalArgs: Default;
-}
-
+pub trait DriverSelector: _unstable_api_::InternalTrait + Args {}
 impl _unstable_api_::InternalTrait for DefaultDriver {}
-
-impl DriverArgsSelection for DefaultDriver {
-    type OptionalArgs = DriverOptionalArgs;
+impl DriverSelector for DefaultDriver {}
+impl Args for DefaultDriver {
     type RequiredArgs = DriverArgs;
+    type OptionalArgs = DriverOptionalArgs;
 }
 
 pub struct SourceCache<'a> {
@@ -98,11 +97,11 @@ impl<'src> SourceCache<'src> {
 /// `driver_options` for itself, and `options` for the tool.
 ///
 /// Fields are public so that they are constructable by the caller.
-pub struct Driver<X, TOpts, DOpts, D: DriverArgsSelection = DefaultDriver>
+pub struct Driver<X, TArgs, DArgs, D: DriverSelector + Args = DefaultDriver>
 where
     X: Tool,
-    DOpts: Into<Options<D::RequiredArgs, D::OptionalArgs>>,
-    TOpts: Into<Options<X::RequiredArgs, X::OptionalArgs>>,
+    DArgs: Into<Options<D::RequiredArgs, D::OptionalArgs>>,
+    TArgs: Into<Options<X::RequiredArgs, X::OptionalArgs>>,
 {
     /// This is mostly here to guide inference, and generally would be a unitary type.
     pub tool: X,
@@ -114,9 +113,9 @@ where
     ///
     /// Similarly if we implement `Path`/source providing in the driver.
     /// Tools should also probably not concern themselves with that.
-    pub driver_options: DOpts,
+    pub driver_options: DArgs,
     // Can this be Into<...>?
-    pub options: TOpts,
+    pub options: TArgs,
 }
 
 /// Errors occurred by the driver.
@@ -151,6 +150,9 @@ where
     X: Tool,
     DOpts: Into<Options<DriverArgs, DriverOptionalArgs>>,
     TOpts: Into<Options<X::RequiredArgs, X::OptionalArgs>>,
+    // This bound is not needed, but perhaps informative.
+    DefaultDriver:
+        DriverSelector + Args<RequiredArgs = DriverArgs, OptionalArgs = DriverOptionalArgs>,
 {
     ///
     /// 1. Populates a `source_cache`

@@ -10,9 +10,11 @@ mod tests {
     impl Tool for Yacc {
         type Error = YaccGrammarError;
         type Warning = YaccGrammarWarning;
+        type Output = GrammarASTWithValidationCertificate;
+    }
+    impl Args for Yacc {
         type OptionalArgs = YaccGrammarOptArgs;
         type RequiredArgs = YaccArgs;
-        type Output = GrammarASTWithValidationCertificate;
     }
 
     #[derive(Debug)]
@@ -128,7 +130,7 @@ mod tests {
 
     impl ToolInit<Yacc> for GrammarASTWithValidationCertificate {
         fn tool_init<R: Diagnostics<Yacc>>(
-            options: Options<<Yacc as Tool>::RequiredArgs, <Yacc as Tool>::OptionalArgs>,
+            options: Options<<Yacc as Args>::RequiredArgs, <Yacc as Args>::OptionalArgs>,
             source_cache: SourceCache<'_>,
             mut emitter: DiagnosticsEmitter<Yacc, R>,
             session: Session,
@@ -224,7 +226,8 @@ mod tests {
     #[test]
     fn unit_driver() {
         impl _unstable_api_::InternalTrait for () {}
-        impl DriverArgsSelection for () {
+        impl DriverSelector for () {}
+        impl Args for () {
             type RequiredArgs = ();
             type OptionalArgs = bool;
         }
@@ -362,12 +365,13 @@ mod tests {
     impl Tool for Lex {
         type Error = LexError;
         type Warning = NeverWarnings;
-        // FIXME look at lex to figure out what all the below should be,
-        // This is mostly a test that we can populate the same source_cache
-        // from multiple tools.
+        // FIXME look at what lex returns.
+        type Output = LexOutput;
+    }
+    impl Args for Lex {
+        // FIXME look at lex args.
         type OptionalArgs = ();
         type RequiredArgs = ();
-        type Output = LexOutput;
     }
 
     #[test]
