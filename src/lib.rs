@@ -28,20 +28,20 @@ where
     /// The type of warnings specific to a tool.
     type Warning: SourceArtifact + Spanned;
     /// The type output by the tool.
-    type Output: for<'args> ToolInit<'args, Self>;
+    type Output: ToolInit<Self>;
     /// A tool specific type for arguments must be given.
-    type RequiredArgs<'args>;
+    type RequiredArgs;
     /// A tool specific type for arguments which derive `Default`
     type OptionalArgs: Default;
 }
 
 /// Trait for constructing tool output.
-pub trait ToolInit<'args, X>
+pub trait ToolInit<X>
 where
     X: Tool,
 {
     fn tool_init<D: Diagnostics<X>>(
-        config: Options<X::RequiredArgs<'args>, X::OptionalArgs>,
+        config: Options<X::RequiredArgs, X::OptionalArgs>,
         source_cache: SourceCache<'_>,
         emitter: DiagnosticsEmitter<X, D>,
         session: Session,
@@ -98,7 +98,7 @@ impl<'src> SourceCache<'src> {
 /// `driver_options` for itself, and `options` for the tool.
 ///
 /// Fields are public so that they are constructable by the caller.
-pub struct Driver<'args, X: Tool, D: DriverArgsSelection = DefaultDriver> {
+pub struct Driver<X: Tool, D: DriverArgsSelection = DefaultDriver> {
     /// This is mostly here to guide inference, and generally would be a unitary type.
     pub tool: X,
     pub driver: D,
@@ -110,7 +110,8 @@ pub struct Driver<'args, X: Tool, D: DriverArgsSelection = DefaultDriver> {
     /// Similarly if we implement `Path`/source providing in the driver.
     /// Tools should also probably not concern themselves with that.
     pub driver_options: Options<D::RequiredArgs, D::OptionalArgs>,
-    pub options: Options<X::RequiredArgs<'args>, X::OptionalArgs>,
+    // Can this be Into<...>?
+    pub options: Options<X::RequiredArgs, X::OptionalArgs>,
 }
 
 /// Errors occurred by the driver.
@@ -140,7 +141,7 @@ impl Session {
     }
 }
 
-impl<'args, X: Tool> Driver<'args, X, DefaultDriver> {
+impl<X: Tool> Driver<X, DefaultDriver> {
     ///
     /// 1. Populates a `source_cache`
     /// 2. Constructes a `Diagnostics emitter`.

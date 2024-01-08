@@ -11,7 +11,7 @@ mod tests {
         type Error = YaccGrammarError;
         type Warning = YaccGrammarWarning;
         type OptionalArgs = YaccGrammarOptArgs;
-        type RequiredArgs<'a> = YaccArgs;
+        type RequiredArgs = YaccArgs;
         type Output = GrammarASTWithValidationCertificate;
     }
 
@@ -126,9 +126,9 @@ mod tests {
         }
     }
 
-    impl<'args> ToolInit<'args, Yacc> for GrammarASTWithValidationCertificate {
+    impl ToolInit<Yacc> for GrammarASTWithValidationCertificate {
         fn tool_init<R: Diagnostics<Yacc>>(
-            options: Options<<Yacc as Tool>::RequiredArgs<'args>, <Yacc as Tool>::OptionalArgs>,
+            options: Options<<Yacc as Tool>::RequiredArgs, <Yacc as Tool>::OptionalArgs>,
             source_cache: SourceCache<'_>,
             mut emitter: DiagnosticsEmitter<Yacc, R>,
             session: Session,
@@ -243,7 +243,7 @@ mod tests {
         //
         // So in addition to changing the `DriverArgsSelection`,
         // they can differ in their initialization as well.
-        impl<X: Tool> Driver<'_, X, ()> {
+        impl<X: Tool> Driver<X, ()> {
             pub fn driver_init<D: Diagnostics<X>>(
                 self,
                 source_cache: &mut HashMap<SourceId, (path::PathBuf, String)>,
@@ -347,7 +347,7 @@ mod tests {
 
     struct LexOutput {}
 
-    impl<'args> ToolInit<'args, Lex> for LexOutput {
+    impl ToolInit<Lex> for LexOutput {
         fn tool_init<'diag, 'src, D: Diagnostics<Lex>>(
             _config: Options<(), ()>,
             _source_cache: SourceCache<'_>,
@@ -365,7 +365,7 @@ mod tests {
         // This is mostly a test that we can populate the same source_cache
         // from multiple tools.
         type OptionalArgs = ();
-        type RequiredArgs<'a> = ();
+        type RequiredArgs = ();
         type Output = LexOutput;
     }
 
