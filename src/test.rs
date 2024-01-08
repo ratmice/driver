@@ -169,8 +169,7 @@ mod tests {
                         source_path: Some("Cargo.lock".into()),
                         ..Default::default()
                     },
-                )
-                    .into(),
+                ),
                 options: (
                     YaccArgs {
                         yacc_kind: YaccKind::Grmtools,
@@ -205,8 +204,7 @@ mod tests {
                         source_path: Some("Cargo.toml".into()),
                         ..Default::default()
                     },
-                )
-                    .into(),
+                ),
                 options: (
                     YaccArgs {
                         yacc_kind: YaccKind::Grmtools,
@@ -241,9 +239,10 @@ mod tests {
         //
         // So in addition to changing the `DriverArgsSelection`,
         // they can differ in their initialization as well.
-        impl<X: Tool, TOpts> Driver<X, TOpts, ()>
+        impl<X, TOpts, DOpts> Driver<X, TOpts, DOpts, ()>
         where
             X: Tool,
+            DOpts: Into<Options<(), bool>>,
             TOpts: Into<Options<X::RequiredArgs, X::OptionalArgs>>,
         {
             pub fn driver_init<D: Diagnostics<X>>(
@@ -252,6 +251,7 @@ mod tests {
                 diagnostics: &mut D,
                 _extra_param: (),
             ) -> Result<X::Output, DriverError> {
+                let _driver_opts: Options<(), bool> = self.driver_options.into();
                 let emitter = DiagnosticsEmitter::new(self.tool, diagnostics);
                 let source_cache = SourceCache { source_cache };
                 let session = Session { source_ids: vec![] };
@@ -269,7 +269,7 @@ mod tests {
             let driver = Driver {
                 tool: Yacc,
                 driver: (),
-                driver_options: ((), true).into(),
+                driver_options: ((), true),
                 options: (
                     YaccArgs {
                         yacc_kind: YaccKind::Grmtools,
@@ -380,7 +380,7 @@ mod tests {
             let driver = Driver {
                 tool: Lex,
                 driver: (),
-                driver_options: ((), true).into(),
+                driver_options: ((), true),
                 options: ((), ()),
             }
             .driver_init(&mut source_cache, &mut diagnostics, ())
@@ -404,8 +404,7 @@ mod tests {
                         source_path: Some("Cargo.lock".into()),
                         ..Default::default()
                     },
-                )
-                    .into(),
+                ),
                 options: ((), ()),
             }
             .driver_init(&mut diagnostics, &mut source_cache)
@@ -426,8 +425,7 @@ mod tests {
                         source_path: Some("Cargo.lock".into()),
                         ..Default::default()
                     },
-                )
-                    .into(),
+                ),
                 options: (
                     YaccArgs {
                         yacc_kind: YaccKind::Grmtools,

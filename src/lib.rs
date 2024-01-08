@@ -98,9 +98,10 @@ impl<'src> SourceCache<'src> {
 /// `driver_options` for itself, and `options` for the tool.
 ///
 /// Fields are public so that they are constructable by the caller.
-pub struct Driver<X, TOpts, D: DriverArgsSelection = DefaultDriver>
+pub struct Driver<X, TOpts, DOpts, D: DriverArgsSelection = DefaultDriver>
 where
     X: Tool,
+    DOpts: Into<Options<D::RequiredArgs, D::OptionalArgs>>,
     TOpts: Into<Options<X::RequiredArgs, X::OptionalArgs>>,
 {
     /// This is mostly here to guide inference, and generally would be a unitary type.
@@ -113,7 +114,7 @@ where
     ///
     /// Similarly if we implement `Path`/source providing in the driver.
     /// Tools should also probably not concern themselves with that.
-    pub driver_options: Options<D::RequiredArgs, D::OptionalArgs>,
+    pub driver_options: DOpts,
     // Can this be Into<...>?
     pub options: TOpts,
 }
@@ -145,9 +146,10 @@ impl Session {
     }
 }
 
-impl<X, TOpts> Driver<X, TOpts, DefaultDriver>
+impl<X, TOpts, DOpts> Driver<X, TOpts, DOpts, DefaultDriver>
 where
     X: Tool,
+    DOpts: Into<Options<DriverArgs, DriverOptionalArgs>>,
     TOpts: Into<Options<X::RequiredArgs, X::OptionalArgs>>,
 {
     ///
@@ -155,14 +157,15 @@ where
     /// 2. Constructes a `Diagnostics emitter`.
     /// 3. Passes everything above to the tool's implementation of `tool_init`.
     pub fn driver_init<D: Diagnostics<X>>(
-        mut self,
+        self,
         diagnostics: &mut D,
         source_cache: &mut HashMap<SourceId, (path::PathBuf, String)>,
     ) -> Result<X::Output, DriverError> {
+        let mut driver_options = self.driver_options.into();
         let mut source_ids = Vec::new();
-        if let Some(source_path) = self.driver_options.optional.source_path.take() {
+        if let Some(source_path) = driver_options.optional.source_path.take() {
             let dir = cap_std::fs::Dir::open_ambient_dir(
-                if let Some(path) = self.driver_options.optional.relative_to_path {
+                if let Some(path) = driver_options.optional.relative_to_path {
                     path
                 } else {
                     std::env::current_dir()?
@@ -177,8 +180,7 @@ where
             source_cache.insert(source_id, (source_path, source));
             source_ids.push(source_id);
         }
-        if let Some((string_path_name, source_string)) = self.driver_options.optional.source_string
-        {
+        if let Some((string_path_name, source_string)) = driver_options.optional.source_string {
             LAST_SOURCE_ID.fetch_add(1, Ordering::SeqCst);
             let source_id = SourceId(LAST_SOURCE_ID.load(Ordering::SeqCst));
             source_cache.insert(source_id, (string_path_name, source_string));
