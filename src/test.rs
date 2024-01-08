@@ -135,12 +135,12 @@ mod tests {
             mut emitter: DiagnosticsEmitter<Yacc, R>,
             session: &mut Session,
         ) -> GrammarASTWithValidationCertificate {
-            let src_id = session.loaded_source_ids().next();
-            if let Some(src_id) = src_id {
-                if let Some(path) = source_cache.path_for_id(src_id) {
+            let source_id = session.loaded_source_ids().first();
+            if let Some(source_id) = source_id.copied() {
+                if let Some(path) = source_cache.path_for_id(source_id) {
                     if path == path::PathBuf::from("Cargo.toml") {
                         emitter.emit_non_fatal_error(YaccGrammarError {
-                            source_id: src_id,
+                            source_id,
                             kind: YaccGrammarErrorKind::Testing(vec![]),
                         });
                     }

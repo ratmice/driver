@@ -205,12 +205,12 @@ pub struct Session {
 /// be loaded from the `source_cache`.
 impl Session {
     /// Any new source id's produced by the driver before running the tool.
-    pub fn loaded_source_ids(&self) -> impl Iterator<Item = SourceId> + '_ {
-        self.source_ids_from_driver.iter().copied()
+    pub fn loaded_source_ids(&self) -> &[SourceId] {
+        &self.source_ids_from_driver
     }
     /// Any new source id's produced by the tool through `SourceCache::add_source`.
-    pub fn added_source_ids(&self) -> impl Iterator<Item = SourceId> + '_ {
-        self.source_ids_from_driver.iter().copied()
+    pub fn added_source_ids(&self) -> &[SourceId] {
+        &self.source_ids_from_driver
     }
     fn add_source_id(&mut self, src_id: SourceId) {
         self.source_ids_from_tool.push(src_id);
