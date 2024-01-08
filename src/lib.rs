@@ -114,33 +114,6 @@ where
     pub tool_args: TArgs,
 }
 
-/// Errors occurred by the driver.
-#[derive(thiserror::Error, Debug)]
-pub enum DriverError {
-    #[error("Io error {0} ")]
-    Io(#[from] io::Error),
-}
-
-static LAST_SOURCE_ID: AtomicUsize = AtomicUsize::new(0);
-
-pub struct Session {
-    source_ids: Vec<SourceId>,
-}
-
-/// A session is created during `driver_init`, and contains
-/// `SourceId`s for the documents loaded during driver init.
-///
-/// While `source_cache`, and `diagnostics` are allowed to
-/// persist across driver runs. `Session` is ephemeral.
-///
-/// This can be used to obtain the subset of the files asked to
-/// be loaded from the `source_cache`.
-impl Session {
-    pub fn source_ids(&self) -> impl Iterator<Item = SourceId> + '_ {
-        self.source_ids.iter().copied()
-    }
-}
-
 impl<X, TOpts, DOpts> Driver<X, TOpts, DOpts, DefaultDriver>
 where
     X: Tool,
@@ -194,6 +167,32 @@ where
             emitter,
             session,
         ))
+    }
+}
+/// Errors occurred by the driver.
+#[derive(thiserror::Error, Debug)]
+pub enum DriverError {
+    #[error("Io error {0} ")]
+    Io(#[from] io::Error),
+}
+
+static LAST_SOURCE_ID: AtomicUsize = AtomicUsize::new(0);
+
+pub struct Session {
+    source_ids: Vec<SourceId>,
+}
+
+/// A session is created during `driver_init`, and contains
+/// `SourceId`s for the documents loaded during driver init.
+///
+/// While `source_cache`, and `diagnostics` are allowed to
+/// persist across driver runs. `Session` is ephemeral.
+///
+/// This can be used to obtain the subset of the files asked to
+/// be loaded from the `source_cache`.
+impl Session {
+    pub fn source_ids(&self) -> impl Iterator<Item = SourceId> + '_ {
+        self.source_ids.iter().copied()
     }
 }
 
