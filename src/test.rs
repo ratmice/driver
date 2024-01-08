@@ -10,9 +10,11 @@ mod tests {
     impl Tool for Yacc {
         type Error = YaccGrammarError;
         type Warning = YaccGrammarWarning;
-        type OptionalArgs = YaccGrammarOptArgs;
-        type RequiredArgs<'a> = YaccArgs;
         type Output = GrammarASTWithValidationCertificate;
+    }
+    impl Args for Yacc {
+        type OptionalArgs = YaccGrammarOptArgs;
+        type RequiredArgs<'x> = YaccArgs;
     }
 
     #[derive(Debug)]
@@ -126,12 +128,12 @@ mod tests {
         }
     }
 
-    impl<'args> ToolInit<'args, Yacc> for GrammarASTWithValidationCertificate {
+    impl ToolInit<Yacc> for GrammarASTWithValidationCertificate {
         fn tool_init<R: Diagnostics<Yacc>>(
-            options: Options<<Yacc as Tool>::RequiredArgs<'args>, <Yacc as Tool>::OptionalArgs>,
+            options: Params<<Yacc as Args>::RequiredArgs<'_>, <Yacc as Args>::OptionalArgs>,
             source_cache: SourceCache<'_>,
             mut emitter: DiagnosticsEmitter<Yacc, R>,
-            session: Session,
+            session: &Session,
         ) -> GrammarASTWithValidationCertificate {
             let src_id = session.source_ids().next();
             if let Some(src_id) = src_id {
@@ -163,26 +165,25 @@ mod tests {
             let driver = Driver {
                 driver: DefaultDriver,
                 tool: Yacc,
-                driver_options: (
+                driver_args: (
                     DriverArgs {},
                     DriverOptionalArgs {
                         source_path: Some("Cargo.lock".into()),
                         ..Default::default()
                     },
-                )
-                    .into(),
-                options: (
+                ),
+                tool_args: (
                     YaccArgs {
                         yacc_kind: YaccKind::Grmtools,
                     },
                     Default::default(),
-                )
-                    .into(),
+                ),
             }
             .driver_init(&mut diagnostics, &mut source_cache)
             .unwrap();
-            let _ast = driver.ast();
-            let _grm = driver.grammar().unwrap();
+            let _session = &driver.session;
+            let _ast = driver.output.ast();
+            let _grm = driver.output.grammar().unwrap();
             #[allow(clippy::drop_non_drop)]
             drop(driver);
         }
@@ -200,26 +201,24 @@ mod tests {
             let driver = Driver {
                 tool: Yacc,
                 driver: DefaultDriver,
-                driver_options: (
+                driver_args: (
                     DriverArgs {},
                     DriverOptionalArgs {
                         source_path: Some("Cargo.toml".into()),
                         ..Default::default()
                     },
-                )
-                    .into(),
-                options: (
+                ),
+                tool_args: (
                     YaccArgs {
                         yacc_kind: YaccKind::Grmtools,
                     },
                     Default::default(),
-                )
-                    .into(),
+                ),
             }
             .driver_init(&mut diagnostics, &mut source_cache)
             .unwrap();
-            let _ast = driver.ast();
-            let _grm = driver.grammar().unwrap();
+            let _ast = driver.output.ast();
+            let _grm = driver.output.grammar().unwrap();
             #[allow(clippy::drop_non_drop)]
             drop(driver);
         }
@@ -228,9 +227,14 @@ mod tests {
     #[test]
     fn unit_driver() {
         impl _unstable_api_::InternalTrait for () {}
-        impl DriverArgsSelection for () {
-            type RequiredArgs = ();
+        impl DriverSelector for () {}
+        impl Args for () {
+            type RequiredArgs<'x> = ();
             type OptionalArgs = bool;
+        }
+
+        impl<X: Tool> DriverTypes<X> for () {
+            type Output<T> = () where T: Tool;
         }
         // These fields should perhaps be combined into something?
         let mut diagnostics = SimpleDiagnostics::default();
@@ -243,21 +247,27 @@ mod tests {
         //
         // So in addition to changing the `DriverArgsSelection`,
         // they can differ in their initialization as well.
-        impl<X: Tool> Driver<'_, X, ()> {
+        impl<X, DArgs, TArgs> Driver<X, DArgs, TArgs, ()>
+        where
+            X: Tool,
+            DArgs: Into<Params<(), bool>>,
+            TArgs: for<'x> Into<Params<X::RequiredArgs<'x>, X::OptionalArgs>>,
+        {
             pub fn driver_init<D: Diagnostics<X>>(
                 self,
                 source_cache: &mut HashMap<SourceId, (path::PathBuf, String)>,
                 diagnostics: &mut D,
                 _extra_param: (),
             ) -> Result<X::Output, DriverError> {
+                let _driver_args: Params<(), bool> = self.driver_args.into();
                 let emitter = DiagnosticsEmitter::new(self.tool, diagnostics);
                 let source_cache = SourceCache { source_cache };
                 let session = Session { source_ids: vec![] };
                 Ok(X::Output::tool_init(
-                    self.options,
+                    self.tool_args.into(),
                     source_cache,
                     emitter,
-                    session,
+                    &session,
                 ))
             }
         }
@@ -267,14 +277,13 @@ mod tests {
             let driver = Driver {
                 tool: Yacc,
                 driver: (),
-                driver_options: ((), true).into(),
-                options: (
+                driver_args: ((), true),
+                tool_args: (
                     YaccArgs {
                         yacc_kind: YaccKind::Grmtools,
                     },
                     Default::default(),
-                )
-                    .into(),
+                ),
             }
             .driver_init(&mut source_cache, &mut diagnostics, ())
             .unwrap();
@@ -347,12 +356,12 @@ mod tests {
 
     struct LexOutput {}
 
-    impl<'args> ToolInit<'args, Lex> for LexOutput {
+    impl ToolInit<Lex> for LexOutput {
         fn tool_init<'diag, 'src, D: Diagnostics<Lex>>(
-            _config: Options<(), ()>,
+            _config: Params<(), ()>,
             _source_cache: SourceCache<'_>,
             _emitter: DiagnosticsEmitter<Lex, D>,
-            _session: Session,
+            _session: &Session,
         ) -> LexOutput {
             LexOutput {}
         }
@@ -361,12 +370,13 @@ mod tests {
     impl Tool for Lex {
         type Error = LexError;
         type Warning = NeverWarnings;
-        // FIXME look at lex to figure out what all the below should be,
-        // This is mostly a test that we can populate the same source_cache
-        // from multiple tools.
-        type OptionalArgs = ();
-        type RequiredArgs<'a> = ();
+        // FIXME look at what lex returns.
         type Output = LexOutput;
+    }
+    impl Args for Lex {
+        // FIXME look at lex args.
+        type OptionalArgs = ();
+        type RequiredArgs<'x> = ();
     }
 
     #[test]
@@ -379,8 +389,8 @@ mod tests {
             let driver = Driver {
                 tool: Lex,
                 driver: (),
-                driver_options: ((), true).into(),
-                options: ((), ()).into(),
+                driver_args: ((), true),
+                tool_args: ((), ()),
             }
             .driver_init(&mut source_cache, &mut diagnostics, ())
             .unwrap();
@@ -397,15 +407,14 @@ mod tests {
             let driver = Driver {
                 tool: Lex,
                 driver: DefaultDriver,
-                driver_options: (
+                driver_args: (
                     DriverArgs {},
                     DriverOptionalArgs {
                         source_path: Some("Cargo.lock".into()),
                         ..Default::default()
                     },
-                )
-                    .into(),
-                options: ((), ()).into(),
+                ),
+                tool_args: ((), ()),
             }
             .driver_init(&mut diagnostics, &mut source_cache)
             .unwrap();
@@ -419,26 +428,24 @@ mod tests {
             let driver = Driver {
                 tool: Yacc,
                 driver: DefaultDriver,
-                driver_options: (
+                driver_args: (
                     DriverArgs {},
                     DriverOptionalArgs {
                         source_path: Some("Cargo.lock".into()),
                         ..Default::default()
                     },
-                )
-                    .into(),
-                options: (
+                ),
+                tool_args: (
                     YaccArgs {
                         yacc_kind: YaccKind::Grmtools,
                     },
                     Default::default(),
-                )
-                    .into(),
+                ),
             }
             .driver_init(&mut diagnostics, &mut source_cache)
             .unwrap();
-            let _ast = driver.ast();
-            let _grm = driver.grammar().unwrap();
+            let _ast = driver.output.ast();
+            let _grm = driver.output.grammar().unwrap();
             #[allow(clippy::drop_non_drop)]
             drop(driver);
         }

@@ -19,7 +19,7 @@ pub trait SourceArtifact {
     fn source_id(&self) -> SourceId;
 }
 
-pub trait Tool
+pub trait Tool: Args
 where
     Self: Sized + Copy,
 {
@@ -28,40 +28,53 @@ where
     /// The type of warnings specific to a tool.
     type Warning: SourceArtifact + Spanned;
     /// The type output by the tool.
-    type Output: for<'args> ToolInit<'args, Self>;
-    /// A tool specific type for arguments must be given.
-    type RequiredArgs<'args>;
-    /// A tool specific type for arguments which derive `Default`
+    type Output: ToolInit<Self>;
+}
+
+pub trait Args {
+    /// A type for arguments that must be given.
+    type RequiredArgs<'a>;
+    /// A type for arguments which derive `Default`
     type OptionalArgs: Default;
+}
+pub trait DriverTypes<X: Tool>: Args {
+    type Output<T>
+    where
+        T: Tool;
 }
 
 /// Trait for constructing tool output.
-pub trait ToolInit<'args, X>
+pub trait ToolInit<X>
 where
     X: Tool,
 {
     fn tool_init<D: Diagnostics<X>>(
-        config: Options<X::RequiredArgs<'args>, X::OptionalArgs>,
+        config: Params<X::RequiredArgs<'_>, X::OptionalArgs>,
         source_cache: SourceCache<'_>,
         emitter: DiagnosticsEmitter<X, D>,
-        session: Session,
-    ) -> X::Output;
+        session: &Session,
+    ) -> Self;
+}
+
+pub struct DriverOutput<X: Tool> {
+    pub session: Session,
+    pub output: X::Output,
 }
 
 #[doc(hidden)]
 pub struct DefaultDriver;
 
 #[doc(hidden)]
-pub trait DriverArgsSelection: _unstable_api_::InternalTrait {
-    type RequiredArgs;
-    type OptionalArgs: Default;
+pub trait DriverSelector: _unstable_api_::InternalTrait {}
+impl _unstable_api_::InternalTrait for DefaultDriver {}
+impl DriverSelector for DefaultDriver {}
+impl<X: Tool> DriverTypes<X> for DefaultDriver {
+    type Output<T> = DriverOutput<T> where T: Tool;
 }
 
-impl _unstable_api_::InternalTrait for DefaultDriver {}
-
-impl DriverArgsSelection for DefaultDriver {
+impl Args for DefaultDriver {
+    type RequiredArgs<'a> = DriverArgs;
     type OptionalArgs = DriverOptionalArgs;
-    type RequiredArgs = DriverArgs;
 }
 
 pub struct SourceCache<'a> {
@@ -98,21 +111,75 @@ impl<'src> SourceCache<'src> {
 /// `driver_options` for itself, and `options` for the tool.
 ///
 /// Fields are public so that they are constructable by the caller.
-pub struct Driver<'args, X: Tool, D: DriverArgsSelection = DefaultDriver> {
+pub struct Driver<X, DArgs, TArgs, D: DriverSelector + DriverTypes<X> = DefaultDriver>
+where
+    X: Tool,
+    DArgs: for<'x> Into<Params<D::RequiredArgs<'x>, D::OptionalArgs>>,
+    TArgs: for<'d> Into<Params<X::RequiredArgs<'d>, X::OptionalArgs>>,
+{
     /// This is mostly here to guide inference, and generally would be a unitary type.
     pub tool: X,
+    /// This is here to guide inference, and allow for future expansion, in the case
+    /// that we require a different driver implementation, or changes to driver_args.
     pub driver: D,
-    /// Options which are specific to the driver and kept hidden
-    /// from the tool. For instance whether warnings are errors.
-    /// Since `tools` route errors through the driver, tools should
-    /// not concern themselves with it.
-    ///
-    /// Similarly if we implement `Path`/source providing in the driver.
-    /// Tools should also probably not concern themselves with that.
-    pub driver_options: Options<D::RequiredArgs, D::OptionalArgs>,
-    pub options: Options<X::RequiredArgs<'args>, X::OptionalArgs>,
+    /// Options that get handled by the driver.
+    pub driver_args: DArgs,
+    // Options specific to a `Tool`.
+    pub tool_args: TArgs,
 }
 
+impl<X, DArgs, TArgs> Driver<X, DArgs, TArgs, DefaultDriver>
+where
+    X: Tool,
+    DArgs: for<'d> Into<Params<DriverArgs, DriverOptionalArgs>>,
+    TArgs: for<'x> Into<Params<X::RequiredArgs<'x>, X::OptionalArgs>>,
+    DefaultDriver: DriverTypes<X>,
+    // This bound is not needed, but perhaps informative.
+    DefaultDriver: DriverSelector
+        + for<'d> Args<RequiredArgs<'d> = DriverArgs, OptionalArgs = DriverOptionalArgs>,
+{
+    ///
+    /// 1. Populates a `source_cache`
+    /// 2. Constructes a `Diagnostics emitter`.
+    /// 3. Passes everything above to the tool's implementation of `tool_init`.
+    pub fn driver_init<D: Diagnostics<X>>(
+        self,
+        diagnostics: &mut D,
+        source_cache: &mut HashMap<SourceId, (path::PathBuf, String)>,
+    ) -> Result<DriverOutput<X>, DriverError> {
+        let mut driver_options = self.driver_args.into();
+        let mut source_ids = Vec::new();
+        if let Some(source_path) = driver_options.optional.source_path.take() {
+            let dir = cap_std::fs::Dir::open_ambient_dir(
+                if let Some(path) = driver_options.optional.relative_to_path {
+                    path
+                } else {
+                    std::env::current_dir()?
+                },
+                cap_std::ambient_authority(),
+            )?;
+            let mut file = dir.open(&source_path)?;
+            let mut source = String::new();
+            LAST_SOURCE_ID.fetch_add(1, Ordering::SeqCst);
+            let source_id = SourceId(LAST_SOURCE_ID.load(Ordering::SeqCst));
+            file.read_to_string(&mut source)?;
+            source_cache.insert(source_id, (source_path, source));
+            source_ids.push(source_id);
+        }
+        if let Some((string_path_name, source_string)) = driver_options.optional.source_string {
+            LAST_SOURCE_ID.fetch_add(1, Ordering::SeqCst);
+            let source_id = SourceId(LAST_SOURCE_ID.load(Ordering::SeqCst));
+            source_cache.insert(source_id, (string_path_name, source_string));
+            source_ids.push(source_id);
+        }
+        let source_cache = SourceCache { source_cache };
+
+        let emitter = DiagnosticsEmitter::new(self.tool, diagnostics);
+        let session = Session { source_ids };
+        let output = X::Output::tool_init(self.tool_args.into(), source_cache, emitter, &session);
+        Ok(DriverOutput { output, session })
+    }
+}
 /// Errors occurred by the driver.
 #[derive(thiserror::Error, Debug)]
 pub enum DriverError {
@@ -137,54 +204,6 @@ pub struct Session {
 impl Session {
     pub fn source_ids(&self) -> impl Iterator<Item = SourceId> + '_ {
         self.source_ids.iter().copied()
-    }
-}
-
-impl<'args, X: Tool> Driver<'args, X, DefaultDriver> {
-    ///
-    /// 1. Populates a `source_cache`
-    /// 2. Constructes a `Diagnostics emitter`.
-    /// 3. Passes everything above to the tool's implementation of `tool_init`.
-    pub fn driver_init<D: Diagnostics<X>>(
-        mut self,
-        diagnostics: &mut D,
-        source_cache: &mut HashMap<SourceId, (path::PathBuf, String)>,
-    ) -> Result<X::Output, DriverError> {
-        let mut source_ids = Vec::new();
-        if let Some(source_path) = self.driver_options.optional.source_path.take() {
-            let dir = cap_std::fs::Dir::open_ambient_dir(
-                if let Some(path) = self.driver_options.optional.relative_to_path {
-                    path
-                } else {
-                    std::env::current_dir()?
-                },
-                cap_std::ambient_authority(),
-            )?;
-            let mut file = dir.open(&source_path)?;
-            let mut source = String::new();
-            LAST_SOURCE_ID.fetch_add(1, Ordering::SeqCst);
-            let source_id = SourceId(LAST_SOURCE_ID.load(Ordering::SeqCst));
-            file.read_to_string(&mut source)?;
-            source_cache.insert(source_id, (source_path, source));
-            source_ids.push(source_id);
-        }
-        if let Some((string_path_name, source_string)) = self.driver_options.optional.source_string
-        {
-            LAST_SOURCE_ID.fetch_add(1, Ordering::SeqCst);
-            let source_id = SourceId(LAST_SOURCE_ID.load(Ordering::SeqCst));
-            source_cache.insert(source_id, (string_path_name, source_string));
-            source_ids.push(source_id);
-        }
-        let source_cache = SourceCache { source_cache };
-
-        let emitter = DiagnosticsEmitter::new(self.tool, diagnostics);
-        let session = Session { source_ids };
-        Ok(X::Output::tool_init(
-            self.options,
-            source_cache,
-            emitter,
-            session,
-        ))
     }
 }
 
@@ -242,7 +261,7 @@ pub struct DriverArgs {
 }
 
 #[derive(Default)]
-/// Optional arguments common to all drivers.
+/// Optional arguments common to a driver.
 pub struct DriverOptionalArgs {
     /// Reads a source at the given `path` relative to the
     /// `relative_to_path` argument.
@@ -268,7 +287,6 @@ pub struct DriverOptionalArgs {
     /// Setting this to any other directory will cause
     /// lookups to be done relative to that path instead.
     pub relative_to_path: Option<path::PathBuf>,
-
     #[doc(hidden)]
     pub _non_exhaustive: _unstable_api_::InternalDefault,
 }
@@ -353,13 +371,13 @@ pub trait Diagnostics<X: Tool> {
     fn no_more_data(&mut self);
 }
 
-/// A pair of required and optional fields.
-pub struct Options<Required, Optional> {
+/// A pair of required and optional parameters.
+pub struct Params<Required, Optional> {
     pub required: Required,
     pub optional: Optional,
 }
 
-impl<Required, Optional> From<(Required, Optional)> for Options<Required, Optional> {
+impl<Required, Optional> From<(Required, Optional)> for Params<Required, Optional> {
     fn from((required, optional): (Required, Optional)) -> Self {
         Self { required, optional }
     }
