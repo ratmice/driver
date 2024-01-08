@@ -262,7 +262,10 @@ mod tests {
                 let _driver_args: Params<(), bool> = self.driver_args.into();
                 let emitter = DiagnosticsEmitter::new(self.tool, diagnostics);
                 let source_cache = SourceCache { source_cache };
-                let mut session = Session { source_ids_from_driver: vec![], source_ids_from_tool: vec![] };
+                let mut session = Session {
+                    source_ids_from_driver: vec![],
+                    source_ids_from_tool: vec![],
+                };
                 Ok(X::Output::tool_init(
                     self.tool_args.into(),
                     source_cache,

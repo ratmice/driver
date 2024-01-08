@@ -97,7 +97,12 @@ impl<'src> SourceCache<'src> {
     }
 
     /// This should allow us to populate the source cache with generated code.
-    pub fn add_source(&mut self, session: &mut Session, path: path::PathBuf, src: String) -> SourceId {
+    pub fn add_source(
+        &mut self,
+        session: &mut Session,
+        path: path::PathBuf,
+        src: String,
+    ) -> SourceId {
         LAST_SOURCE_ID.fetch_add(1, Ordering::SeqCst);
         let source_id = SourceId(LAST_SOURCE_ID.load(Ordering::SeqCst));
         self.source_cache.insert(source_id, (path, src));
@@ -115,8 +120,8 @@ impl<'src> SourceCache<'src> {
 pub struct Driver<X, DArgs, TArgs, D: DriverSelector + DriverTypes<X> = DefaultDriver>
 where
     X: Tool,
-    DArgs: for<'x> Into<Params<D::RequiredArgs<'x>, D::OptionalArgs>>,
-    TArgs: for<'d> Into<Params<X::RequiredArgs<'d>, X::OptionalArgs>>,
+    DArgs: for<'d> Into<Params<D::RequiredArgs<'d>, D::OptionalArgs>>,
+    TArgs: for<'x> Into<Params<X::RequiredArgs<'x>, X::OptionalArgs>>,
 {
     /// This is mostly here to guide inference, and generally would be a unitary type.
     pub tool: X,
@@ -176,8 +181,12 @@ where
         let source_cache = SourceCache { source_cache };
 
         let emitter = DiagnosticsEmitter::new(self.tool, diagnostics);
-        let mut session = Session { source_ids_from_driver, source_ids_from_tool: vec![] };
-        let output = X::Output::tool_init(self.tool_args.into(), source_cache, emitter, &mut session);
+        let mut session = Session {
+            source_ids_from_driver,
+            source_ids_from_tool: vec![],
+        };
+        let output =
+            X::Output::tool_init(self.tool_args.into(), source_cache, emitter, &mut session);
         Ok(DriverOutput { output, session })
     }
 }
