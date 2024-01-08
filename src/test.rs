@@ -165,14 +165,14 @@ mod tests {
             let driver = Driver {
                 driver: DefaultDriver,
                 tool: Yacc,
-                driver_options: (
+                driver_args: (
                     DriverArgs {},
                     DriverOptionalArgs {
                         source_path: Some("Cargo.lock".into()),
                         ..Default::default()
                     },
                 ),
-                options: (
+                tool_args: (
                     YaccArgs {
                         yacc_kind: YaccKind::Grmtools,
                     },
@@ -200,14 +200,14 @@ mod tests {
             let driver = Driver {
                 tool: Yacc,
                 driver: DefaultDriver,
-                driver_options: (
+                driver_args: (
                     DriverArgs {},
                     DriverOptionalArgs {
                         source_path: Some("Cargo.toml".into()),
                         ..Default::default()
                     },
                 ),
-                options: (
+                tool_args: (
                     YaccArgs {
                         yacc_kind: YaccKind::Grmtools,
                     },
@@ -254,12 +254,12 @@ mod tests {
                 diagnostics: &mut D,
                 _extra_param: (),
             ) -> Result<X::Output, DriverError> {
-                let _driver_opts: Options<(), bool> = self.driver_options.into();
+                let _driver_opts: Options<(), bool> = self.driver_args.into();
                 let emitter = DiagnosticsEmitter::new(self.tool, diagnostics);
                 let source_cache = SourceCache { source_cache };
                 let session = Session { source_ids: vec![] };
                 Ok(X::Output::tool_init(
-                    self.options.into(),
+                    self.tool_args.into(),
                     source_cache,
                     emitter,
                     session,
@@ -272,8 +272,8 @@ mod tests {
             let driver = Driver {
                 tool: Yacc,
                 driver: (),
-                driver_options: ((), true),
-                options: (
+                driver_args: ((), true),
+                tool_args: (
                     YaccArgs {
                         yacc_kind: YaccKind::Grmtools,
                     },
@@ -384,8 +384,8 @@ mod tests {
             let driver = Driver {
                 tool: Lex,
                 driver: (),
-                driver_options: ((), true),
-                options: ((), ()),
+                driver_args: ((), true),
+                tool_args: ((), ()),
             }
             .driver_init(&mut source_cache, &mut diagnostics, ())
             .unwrap();
@@ -402,14 +402,14 @@ mod tests {
             let driver = Driver {
                 tool: Lex,
                 driver: DefaultDriver,
-                driver_options: (
+                driver_args: (
                     DriverArgs {},
                     DriverOptionalArgs {
                         source_path: Some("Cargo.lock".into()),
                         ..Default::default()
                     },
                 ),
-                options: ((), ()),
+                tool_args: ((), ()),
             }
             .driver_init(&mut diagnostics, &mut source_cache)
             .unwrap();
@@ -423,14 +423,14 @@ mod tests {
             let driver = Driver {
                 tool: Yacc,
                 driver: DefaultDriver,
-                driver_options: (
+                driver_args: (
                     DriverArgs {},
                     DriverOptionalArgs {
                         source_path: Some("Cargo.lock".into()),
                         ..Default::default()
                     },
                 ),
-                options: (
+                tool_args: (
                     YaccArgs {
                         yacc_kind: YaccKind::Grmtools,
                     },

@@ -105,17 +105,13 @@ where
 {
     /// This is mostly here to guide inference, and generally would be a unitary type.
     pub tool: X,
+    /// This is here to guide inference, and allow for future expansion, in the case
+    /// that we require a different driver implementation, or changes to driver_args.
     pub driver: D,
-    /// Options which are specific to the driver and kept hidden
-    /// from the tool. For instance whether warnings are errors.
-    /// Since `tools` route errors through the driver, tools should
-    /// not concern themselves with it.
-    ///
-    /// Similarly if we implement `Path`/source providing in the driver.
-    /// Tools should also probably not concern themselves with that.
-    pub driver_options: DArgs,
-    // Can this be Into<...>?
-    pub options: TArgs,
+    /// Options that get handled by the driver.
+    pub driver_args: DArgs,
+    // Options specific to a `Tool`.
+    pub tool_args: TArgs,
 }
 
 /// Errors occurred by the driver.
@@ -163,7 +159,7 @@ where
         diagnostics: &mut D,
         source_cache: &mut HashMap<SourceId, (path::PathBuf, String)>,
     ) -> Result<X::Output, DriverError> {
-        let mut driver_options = self.driver_options.into();
+        let mut driver_options = self.driver_args.into();
         let mut source_ids = Vec::new();
         if let Some(source_path) = driver_options.optional.source_path.take() {
             let dir = cap_std::fs::Dir::open_ambient_dir(
@@ -193,7 +189,7 @@ where
         let emitter = DiagnosticsEmitter::new(self.tool, diagnostics);
         let session = Session { source_ids };
         Ok(X::Output::tool_init(
-            self.options.into(),
+            self.tool_args.into(),
             source_cache,
             emitter,
             session,
