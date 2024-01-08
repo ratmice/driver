@@ -133,7 +133,7 @@ mod tests {
             options: Params<<Yacc as Args>::RequiredArgs<'_>, <Yacc as Args>::OptionalArgs>,
             source_cache: SourceCache<'_>,
             mut emitter: DiagnosticsEmitter<Yacc, R>,
-            session: &Session,
+            session: &mut Session,
         ) -> GrammarASTWithValidationCertificate {
             let src_id = session.source_ids().next();
             if let Some(src_id) = src_id {
@@ -262,12 +262,12 @@ mod tests {
                 let _driver_args: Params<(), bool> = self.driver_args.into();
                 let emitter = DiagnosticsEmitter::new(self.tool, diagnostics);
                 let source_cache = SourceCache { source_cache };
-                let session = Session { source_ids: vec![] };
+                let mut session = Session { source_ids: vec![] };
                 Ok(X::Output::tool_init(
                     self.tool_args.into(),
                     source_cache,
                     emitter,
-                    &session,
+                    &mut session,
                 ))
             }
         }
@@ -361,7 +361,7 @@ mod tests {
             _config: Params<(), ()>,
             _source_cache: SourceCache<'_>,
             _emitter: DiagnosticsEmitter<Lex, D>,
-            _session: &Session,
+            _session: &mut Session,
         ) -> LexOutput {
             LexOutput {}
         }

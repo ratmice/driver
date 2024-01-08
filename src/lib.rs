@@ -52,7 +52,7 @@ where
         config: Params<X::RequiredArgs<'_>, X::OptionalArgs>,
         source_cache: SourceCache<'_>,
         emitter: DiagnosticsEmitter<X, D>,
-        session: &Session,
+        session: &mut Session,
     ) -> Self;
 }
 
@@ -175,8 +175,8 @@ where
         let source_cache = SourceCache { source_cache };
 
         let emitter = DiagnosticsEmitter::new(self.tool, diagnostics);
-        let session = Session { source_ids };
-        let output = X::Output::tool_init(self.tool_args.into(), source_cache, emitter, &session);
+        let mut session = Session { source_ids };
+        let output = X::Output::tool_init(self.tool_args.into(), source_cache, emitter, &mut session);
         Ok(DriverOutput { output, session })
     }
 }
