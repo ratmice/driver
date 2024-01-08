@@ -32,7 +32,7 @@ where
 }
 
 pub trait Args {
-    /// A tool specific type for arguments must be given.
+    /// A tool specific type for arguments that must be given.
     type RequiredArgs;
     /// A tool specific type for arguments which derive `Default`
     type OptionalArgs: Default;
@@ -44,7 +44,7 @@ where
     X: Tool,
 {
     fn tool_init<D: Diagnostics<X>>(
-        config: Options<X::RequiredArgs, X::OptionalArgs>,
+        config: Params<X::RequiredArgs, X::OptionalArgs>,
         source_cache: SourceCache<'_>,
         emitter: DiagnosticsEmitter<X, D>,
         session: Session,
@@ -100,8 +100,8 @@ impl<'src> SourceCache<'src> {
 pub struct Driver<X, TArgs, DArgs, D: DriverSelector + Args = DefaultDriver>
 where
     X: Tool,
-    DArgs: Into<Options<D::RequiredArgs, D::OptionalArgs>>,
-    TArgs: Into<Options<X::RequiredArgs, X::OptionalArgs>>,
+    DArgs: Into<Params<D::RequiredArgs, D::OptionalArgs>>,
+    TArgs: Into<Params<X::RequiredArgs, X::OptionalArgs>>,
 {
     /// This is mostly here to guide inference, and generally would be a unitary type.
     pub tool: X,
@@ -144,8 +144,8 @@ impl Session {
 impl<X, TOpts, DOpts> Driver<X, TOpts, DOpts, DefaultDriver>
 where
     X: Tool,
-    DOpts: Into<Options<DriverArgs, DriverOptionalArgs>>,
-    TOpts: Into<Options<X::RequiredArgs, X::OptionalArgs>>,
+    DOpts: Into<Params<DriverArgs, DriverOptionalArgs>>,
+    TOpts: Into<Params<X::RequiredArgs, X::OptionalArgs>>,
     // This bound is not needed, but perhaps informative.
     DefaultDriver:
         DriverSelector + Args<RequiredArgs = DriverArgs, OptionalArgs = DriverOptionalArgs>,
@@ -251,7 +251,7 @@ pub struct DriverArgs {
 }
 
 #[derive(Default)]
-/// Optional arguments common to all drivers.
+/// Optional arguments common to a driver.
 pub struct DriverOptionalArgs {
     /// Reads a source at the given `path` relative to the
     /// `relative_to_path` argument.
@@ -362,13 +362,13 @@ pub trait Diagnostics<X: Tool> {
     fn no_more_data(&mut self);
 }
 
-/// A pair of required and optional fields.
-pub struct Options<Required, Optional> {
+/// A pair of required and optional parameters.
+pub struct Params<Required, Optional> {
     pub required: Required,
     pub optional: Optional,
 }
 
-impl<Required, Optional> From<(Required, Optional)> for Options<Required, Optional> {
+impl<Required, Optional> From<(Required, Optional)> for Params<Required, Optional> {
     fn from((required, optional): (Required, Optional)) -> Self {
         Self { required, optional }
     }

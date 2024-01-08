@@ -130,7 +130,7 @@ mod tests {
 
     impl ToolInit<Yacc> for GrammarASTWithValidationCertificate {
         fn tool_init<R: Diagnostics<Yacc>>(
-            options: Options<<Yacc as Args>::RequiredArgs, <Yacc as Args>::OptionalArgs>,
+            options: Params<<Yacc as Args>::RequiredArgs, <Yacc as Args>::OptionalArgs>,
             source_cache: SourceCache<'_>,
             mut emitter: DiagnosticsEmitter<Yacc, R>,
             session: Session,
@@ -245,8 +245,8 @@ mod tests {
         impl<X, TOpts, DOpts> Driver<X, TOpts, DOpts, ()>
         where
             X: Tool,
-            DOpts: Into<Options<(), bool>>,
-            TOpts: Into<Options<X::RequiredArgs, X::OptionalArgs>>,
+            DOpts: Into<Params<(), bool>>,
+            TOpts: Into<Params<X::RequiredArgs, X::OptionalArgs>>,
         {
             pub fn driver_init<D: Diagnostics<X>>(
                 self,
@@ -254,7 +254,7 @@ mod tests {
                 diagnostics: &mut D,
                 _extra_param: (),
             ) -> Result<X::Output, DriverError> {
-                let _driver_opts: Options<(), bool> = self.driver_args.into();
+                let _driver_opts: Params<(), bool> = self.driver_args.into();
                 let emitter = DiagnosticsEmitter::new(self.tool, diagnostics);
                 let source_cache = SourceCache { source_cache };
                 let session = Session { source_ids: vec![] };
@@ -353,7 +353,7 @@ mod tests {
 
     impl ToolInit<Lex> for LexOutput {
         fn tool_init<'diag, 'src, D: Diagnostics<Lex>>(
-            _config: Options<(), ()>,
+            _config: Params<(), ()>,
             _source_cache: SourceCache<'_>,
             _emitter: DiagnosticsEmitter<Lex, D>,
             _session: Session,
