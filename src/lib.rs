@@ -104,8 +104,7 @@ impl<'src> SourceCache<'src> {
         path: path::PathBuf,
         src: String,
     ) -> SourceId {
-        LAST_SOURCE_ID.fetch_add(1, Ordering::SeqCst);
-        let source_id = SourceId(LAST_SOURCE_ID.load(Ordering::SeqCst));
+        let source_id = SourceId(NEXT_SOURCE_ID.fetch_add(1, Ordering::SeqCst));
         self.source_cache.insert(source_id, (path, src));
         session.add_source_id(source_id);
         source_id
@@ -157,8 +156,7 @@ where
         let mut driver_options = self.driver_args.into();
         let mut source_ids_from_driver = Vec::new();
         let mut add_to_src_cache =|source_path, source| {
-            let last = LAST_SOURCE_ID.fetch_add(1, Ordering::SeqCst);
-            let source_id = SourceId(last + 1);
+            let source_id = SourceId(NEXT_SOURCE_ID.fetch_add(1, Ordering::SeqCst));
             source_cache.insert(source_id, (source_path, source));
             source_ids_from_driver.push(source_id);
         };
@@ -192,7 +190,7 @@ pub enum DriverError {
     Io(#[from] io::Error),
 }
 
-static LAST_SOURCE_ID: AtomicUsize = AtomicUsize::new(0);
+static NEXT_SOURCE_ID: AtomicUsize = AtomicUsize::new(0);
 
 pub struct Session {
     source_ids_from_driver: Vec<SourceId>,
