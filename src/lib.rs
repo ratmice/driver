@@ -3,6 +3,7 @@ use std::io::Read as _;
 use std::sync::atomic::AtomicUsize;
 use std::{collections::HashMap, sync::atomic::Ordering};
 use std::{error, fmt, io, path};
+pub use dir_view::DirView;
 
 #[cfg(test)]
 mod test;
@@ -155,29 +156,23 @@ where
     ) -> Result<DriverOutput<X>, DriverError> {
         let mut driver_options = self.driver_args.into();
         let mut source_ids_from_driver = Vec::new();
-        if let Some(source_path) = driver_options.optional.source_path.take() {
-            let dir = cap_std::fs::Dir::open_ambient_dir(
-                if let Some(path) = driver_options.optional.relative_to_path {
-                    path
-                } else {
-                    std::env::current_dir()?
-                },
-                cap_std::ambient_authority(),
-            )?;
-            let mut file = dir.open(&source_path)?;
-            let mut source = String::new();
-            LAST_SOURCE_ID.fetch_add(1, Ordering::SeqCst);
-            let source_id = SourceId(LAST_SOURCE_ID.load(Ordering::SeqCst));
-            file.read_to_string(&mut source)?;
+        let mut add_to_src_cache =|source_path, source| {
+            let last = LAST_SOURCE_ID.fetch_add(1, Ordering::SeqCst);
+            let source_id = SourceId(last + 1);
             source_cache.insert(source_id, (source_path, source));
             source_ids_from_driver.push(source_id);
+        };
+        if let Some((source_path, source)) = driver_options.optional.named_string.take() {
+            add_to_src_cache(source_path, source);
         }
-        if let Some((string_path_name, source_string)) = driver_options.optional.source_string {
-            LAST_SOURCE_ID.fetch_add(1, Ordering::SeqCst);
-            let source_id = SourceId(LAST_SOURCE_ID.load(Ordering::SeqCst));
-            source_cache.insert(source_id, (string_path_name, source_string));
-            source_ids_from_driver.push(source_id);
+        if let Some((source_path, dir)) = driver_options.optional.read_source {
+            let mut file = dir.open(&source_path)?;
+            let mut source = String::new();
+
+            file.read_to_string(&mut source)?;
+            add_to_src_cache(source_path, source);
         }
+
         let source_cache = SourceCache { source_cache };
 
         let emitter = DiagnosticsEmitter::new(self.tool, diagnostics);
@@ -282,30 +277,10 @@ pub struct DriverArgs {
 #[derive(Default)]
 /// Optional arguments common to a driver.
 pub struct DriverOptionalArgs {
-    /// Reads a source at the given `path` relative to the
-    /// `relative_to_path` argument.
-    pub source_path: Option<path::PathBuf>,
-    /// Uses a given name, and string.
-    pub source_string: Option<(path::PathBuf, String)>,
-    /// Allows `source_path` lookup relative to a directory path.
-    /// Defaults to the current working directory.
-    ///
-    /// To allow unrestricted lookups across the filesystem,
-    /// you'll need to set this to the root path.
-    ///
-    /// ```
-    /// # use driver::DriverOptionalArgs;
-    /// # let _ =
-    /// DriverOptionalArgs {
-    ///    relative_to_path: Some((&std::path::Component::RootDir).into()),
-    ///    .. Default::default()
-    /// }
-    /// # ;
-    /// ````
-    ///
-    /// Setting this to any other directory will cause
-    /// lookups to be done relative to that path instead.
-    pub relative_to_path: Option<path::PathBuf>,
+    /// Gives an arbitrary string a name.
+    pub named_string: Option<(std::path::PathBuf, String)>,
+    /// Takes an arbitrary `DirView`
+    pub read_source: Option<(std::path::PathBuf, DirView)>,
     #[doc(hidden)]
     pub _non_exhaustive: _unstable_api_::InternalDefault,
 }

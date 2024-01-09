@@ -10,4 +10,5 @@ edition = "2021"
 
 [dependencies]
 cap-std = "2.0.1"
+dir-view = "0.2.0"
 thiserror = "1.0.56"

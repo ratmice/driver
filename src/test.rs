@@ -17,6 +17,14 @@ mod tests {
         type RequiredArgs = YaccArgs;
     }
 
+    fn cwd_dir_view() -> Result<dir_view::DirView, DriverError> {
+        Ok(DirView::open_ambient_dir(
+            std::env::current_dir()?,
+            dir_view::ViewKind::Readonly,
+            cap_std::ambient_authority(),
+        )?)
+    }
+
     #[derive(Debug)]
     pub enum YaccOriginalActionKind {
         UserAction,
@@ -168,7 +176,7 @@ mod tests {
                 driver_args: (
                     DriverArgs {},
                     DriverOptionalArgs {
-                        source_path: Some("Cargo.lock".into()),
+                        read_source: Some(("Cargo.lock".into(), cwd_dir_view().unwrap())),
                         ..Default::default()
                     },
                 ),
@@ -204,7 +212,7 @@ mod tests {
                 driver_args: (
                     DriverArgs {},
                     DriverOptionalArgs {
-                        source_path: Some("Cargo.toml".into()),
+                        read_source: Some(("Cargo.toml".into(), cwd_dir_view().unwrap())),
                         ..Default::default()
                     },
                 ),
@@ -413,7 +421,7 @@ mod tests {
                 driver_args: (
                     DriverArgs {},
                     DriverOptionalArgs {
-                        source_path: Some("Cargo.lock".into()),
+                        read_source: Some(("Cargo.lock".into(), cwd_dir_view().unwrap())),
                         ..Default::default()
                     },
                 ),
@@ -434,7 +442,7 @@ mod tests {
                 driver_args: (
                     DriverArgs {},
                     DriverOptionalArgs {
-                        source_path: Some("Cargo.lock".into()),
+                        read_source: Some(("Cargo.lock".into(), cwd_dir_view().unwrap())),
                         ..Default::default()
                     },
                 ),
