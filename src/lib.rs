@@ -30,6 +30,7 @@ where
     type Warning: SourceArtifact + Spanned;
     /// The type output by the tool.
     type Output: ToolInit<Self>;
+    type SourceKind;
 }
 
 pub trait Args {
@@ -53,12 +54,12 @@ where
         config: Params<X::RequiredArgs, X::OptionalArgs>,
         source_cache: SourceCache<'_>,
         emitter: DiagnosticsEmitter<X, D>,
-        session: &mut Session,
+        session: &mut Session<X::SourceKind>,
     ) -> Self;
 }
 
 pub struct DriverOutput<X: Tool> {
-    pub session: Session,
+    pub session: Session<X::SourceKind>,
     pub output: X::Output,
 }
 
@@ -98,15 +99,16 @@ impl<'src> SourceCache<'src> {
     }
 
     /// This should allow us to populate the source cache with generated code.
-    pub fn add_source(
+    pub fn add_source<SourceKind>(
         &mut self,
-        session: &mut Session,
+        session: &mut Session<SourceKind>,
         path: path::PathBuf,
         src: String,
+        kind: SourceKind,
     ) -> SourceId {
         let source_id = SourceId(NEXT_SOURCE_ID.fetch_add(1, Ordering::SeqCst));
         self.source_cache.insert(source_id, (path, src));
-        session.add_source_id(source_id);
+        session.add_source_id(source_id, kind);
         source_id
     }
 }
@@ -177,6 +179,7 @@ where
         let mut session = Session {
             source_ids_from_driver,
             source_ids_from_tool: vec![],
+            source_kinds: HashMap::new(),
         };
         let output =
             X::Output::tool_init(self.tool_args.into(), source_cache, emitter, &mut session);
@@ -192,9 +195,10 @@ pub enum DriverError {
 
 static NEXT_SOURCE_ID: AtomicUsize = AtomicUsize::new(0);
 
-pub struct Session {
+pub struct Session<SourceKind> {
     source_ids_from_driver: Vec<SourceId>,
     source_ids_from_tool: Vec<SourceId>,
+    source_kinds: HashMap<SourceId, SourceKind>,
 }
 
 /// A session is created during `driver_init`, and contains
@@ -205,7 +209,7 @@ pub struct Session {
 ///
 /// This can be used to obtain the subset of the files asked to
 /// be loaded from the `source_cache`.
-impl Session {
+impl<SourceKind> Session<SourceKind> {
     /// Any new source id's produced by the driver before running the tool.
     pub fn loaded_source_ids(&self) -> &[SourceId] {
         &self.source_ids_from_driver
@@ -214,8 +218,9 @@ impl Session {
     pub fn added_source_ids(&self) -> &[SourceId] {
         &self.source_ids_from_driver
     }
-    fn add_source_id(&mut self, src_id: SourceId) {
+    fn add_source_id(&mut self, src_id: SourceId, kind: SourceKind) {
         self.source_ids_from_tool.push(src_id);
+        self.source_kinds.insert(src_id, kind);
     }
 }
 

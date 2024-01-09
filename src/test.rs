@@ -7,11 +7,18 @@ mod tests {
     #[derive(Copy, Clone)]
     struct Yacc;
 
+    enum YaccSourceKind {
+        YaccSourceInput,
+        YaccRustSourceOutput,
+    }
+
     impl Tool for Yacc {
         type Error = YaccGrammarError;
         type Warning = YaccGrammarWarning;
         type Output = GrammarASTWithValidationCertificate;
+        type SourceKind = YaccSourceKind;
     }
+
     impl Args for Yacc {
         type OptionalArgs = YaccGrammarOptArgs;
         type RequiredArgs = YaccArgs;
@@ -141,7 +148,7 @@ mod tests {
             options: Params<<Yacc as Args>::RequiredArgs, <Yacc as Args>::OptionalArgs>,
             source_cache: SourceCache<'_>,
             mut emitter: DiagnosticsEmitter<Yacc, R>,
-            session: &mut Session,
+            session: &mut Session<YaccSourceKind>,
         ) -> GrammarASTWithValidationCertificate {
             let source_id = session.loaded_source_ids().first();
             if let Some(source_id) = source_id.copied() {
@@ -273,6 +280,7 @@ mod tests {
                 let mut session = Session {
                     source_ids_from_driver: vec![],
                     source_ids_from_tool: vec![],
+                    source_kinds: HashMap::new(),
                 };
                 Ok(X::Output::tool_init(
                     self.tool_args.into(),
@@ -372,10 +380,15 @@ mod tests {
             _config: Params<(), ()>,
             _source_cache: SourceCache<'_>,
             _emitter: DiagnosticsEmitter<Lex, D>,
-            _session: &mut Session,
+            _session: &mut Session<LexSourceKind>,
         ) -> LexOutput {
             LexOutput {}
         }
+    }
+
+    enum LexSourceKind {
+        LexSourceInput,
+        LexRustSourceOutput,
     }
 
     impl Tool for Lex {
@@ -383,7 +396,9 @@ mod tests {
         type Warning = NeverWarnings;
         // FIXME look at what lex returns.
         type Output = LexOutput;
+        type SourceKind = LexSourceKind;
     }
+
     impl Args for Lex {
         // FIXME look at lex args.
         type OptionalArgs = ();
