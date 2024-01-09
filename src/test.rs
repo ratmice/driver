@@ -1,6 +1,9 @@
+use crate::default_impls::SimpleDiagnostics;
+use std::{collections::HashMap, path};
 #[cfg(test)]
 mod tests {
     #![allow(dead_code)]
+    use super::*;
     use crate::*;
     use std::error::Error;
 
