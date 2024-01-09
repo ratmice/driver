@@ -243,10 +243,10 @@ mod tests {
         // Not for any reason, just to highlight that there can be multiple impls
         // for this struct due to the default type instace. The other being:
         //
-        // impl<X: Tool> Driver<'_, X, DefaultDriver>.
+        // impl<X, ...> Driver<... , DefaultDriver>.
         //
-        // So in addition to changing the `DriverArgsSelection`,
-        // they can differ in their initialization as well.
+        // With this we can change both the `driver_init` implementation,
+        // and the `DriverArgs`, or just change `driver_init`.
         impl<X, DArgs, TArgs> Driver<X, DArgs, TArgs, ()>
         where
             X: Tool,
