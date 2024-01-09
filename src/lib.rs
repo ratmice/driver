@@ -33,7 +33,7 @@ where
 
 pub trait Args {
     /// A type for arguments that must be given.
-    type RequiredArgs<'a>;
+    type RequiredArgs;
     /// A type for arguments which derive `Default`
     type OptionalArgs: Default;
 }
@@ -49,7 +49,7 @@ where
     X: Tool,
 {
     fn tool_init<D: Diagnostics<X>>(
-        config: Params<X::RequiredArgs<'_>, X::OptionalArgs>,
+        config: Params<X::RequiredArgs, X::OptionalArgs>,
         source_cache: SourceCache<'_>,
         emitter: DiagnosticsEmitter<X, D>,
         session: &mut Session,
@@ -73,7 +73,7 @@ impl<X: Tool> DriverTypes<X> for DefaultDriver {
 }
 
 impl Args for DefaultDriver {
-    type RequiredArgs<'a> = DriverArgs;
+    type RequiredArgs = DriverArgs;
     type OptionalArgs = DriverOptionalArgs;
 }
 
@@ -120,8 +120,8 @@ impl<'src> SourceCache<'src> {
 pub struct Driver<X, DArgs, TArgs, D: DriverSelector + DriverTypes<X> = DefaultDriver>
 where
     X: Tool,
-    DArgs: for<'d> Into<Params<D::RequiredArgs<'d>, D::OptionalArgs>>,
-    TArgs: for<'x> Into<Params<X::RequiredArgs<'x>, X::OptionalArgs>>,
+    DArgs: Into<Params<D::RequiredArgs, D::OptionalArgs>>,
+    TArgs: Into<Params<X::RequiredArgs, X::OptionalArgs>>,
 {
     /// This is mostly here to guide inference, and generally would be a unitary type.
     pub tool: X,
@@ -137,12 +137,12 @@ where
 impl<X, DArgs, TArgs> Driver<X, DArgs, TArgs, DefaultDriver>
 where
     X: Tool,
-    DArgs: for<'d> Into<Params<DriverArgs, DriverOptionalArgs>>,
-    TArgs: for<'x> Into<Params<X::RequiredArgs<'x>, X::OptionalArgs>>,
+    DArgs: Into<Params<DriverArgs, DriverOptionalArgs>>,
+    TArgs: Into<Params<X::RequiredArgs, X::OptionalArgs>>,
     DefaultDriver: DriverTypes<X>,
     // This bound is not needed, but perhaps informative.
-    DefaultDriver: DriverSelector
-        + for<'d> Args<RequiredArgs<'d> = DriverArgs, OptionalArgs = DriverOptionalArgs>,
+    DefaultDriver:
+        DriverSelector + Args<RequiredArgs = DriverArgs, OptionalArgs = DriverOptionalArgs>,
 {
     ///
     /// 1. Populates a `source_cache`

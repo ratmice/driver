@@ -14,7 +14,7 @@ mod tests {
     }
     impl Args for Yacc {
         type OptionalArgs = YaccGrammarOptArgs;
-        type RequiredArgs<'x> = YaccArgs;
+        type RequiredArgs = YaccArgs;
     }
 
     #[derive(Debug)]
@@ -130,7 +130,7 @@ mod tests {
 
     impl ToolInit<Yacc> for GrammarASTWithValidationCertificate {
         fn tool_init<R: Diagnostics<Yacc>>(
-            options: Params<<Yacc as Args>::RequiredArgs<'_>, <Yacc as Args>::OptionalArgs>,
+            options: Params<<Yacc as Args>::RequiredArgs, <Yacc as Args>::OptionalArgs>,
             source_cache: SourceCache<'_>,
             mut emitter: DiagnosticsEmitter<Yacc, R>,
             session: &mut Session,
@@ -229,7 +229,7 @@ mod tests {
         impl _unstable_api_::InternalTrait for () {}
         impl DriverSelector for () {}
         impl Args for () {
-            type RequiredArgs<'x> = ();
+            type RequiredArgs = ();
             type OptionalArgs = bool;
         }
 
@@ -251,7 +251,7 @@ mod tests {
         where
             X: Tool,
             DArgs: Into<Params<(), bool>>,
-            TArgs: for<'x> Into<Params<X::RequiredArgs<'x>, X::OptionalArgs>>,
+            TArgs: Into<Params<X::RequiredArgs, X::OptionalArgs>>,
         {
             pub fn driver_init<D: Diagnostics<X>>(
                 self,
@@ -379,7 +379,7 @@ mod tests {
     impl Args for Lex {
         // FIXME look at lex args.
         type OptionalArgs = ();
-        type RequiredArgs<'x> = ();
+        type RequiredArgs = ();
     }
 
     #[test]
