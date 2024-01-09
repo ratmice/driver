@@ -1,6 +1,6 @@
 use crate::{
     Args, Params, _unstable_api_,
-    default_impls::{DefaultDriver, DriverArgs, DriverOptionalArgs},
+    default_impls::DefaultDriver,
     diagnostics::{Diagnostics, DiagnosticsEmitter},
     source::{Session, SourceCache, SourceId},
     tool::{Tool, ToolInit},
@@ -18,9 +18,9 @@ pub trait DriverSelector: _unstable_api_::InternalTrait {}
 ///
 /// Fields are public so that they are constructable by the caller.
 pub struct Driver<X, D = DefaultDriver>
-where X: Tool,
-D: DriverSelector + DriverTypes<X>
-
+where
+    X: Tool,
+    D: DriverSelector + DriverTypes<X>,
 {
     /// This is mostly here to guide inference, and generally would be a unitary type.
     pub tool: X,
@@ -36,12 +36,15 @@ D: DriverSelector + DriverTypes<X>
 impl<X> Driver<X, DefaultDriver>
 where
     X: Tool,
-    (<DefaultDriver as Args>::RequiredArgs, <DefaultDriver as Args>::OptionalArgs): Into<Params<DefaultDriver>>,
+    (
+        <DefaultDriver as Args>::RequiredArgs,
+        <DefaultDriver as Args>::OptionalArgs,
+    ): Into<Params<DefaultDriver>>,
     (X::RequiredArgs, X::OptionalArgs): Into<Params<X>>,
     DefaultDriver: DriverTypes<X>,
-    // This bound is not needed, but perhaps informative.
-    DefaultDriver:
-        DriverSelector + Args<RequiredArgs = DriverArgs, OptionalArgs = DriverOptionalArgs>,
+    // This bound is implied, but perhaps informative.
+    // DefaultDriver:
+    //     DriverSelector + Args<RequiredArgs = DriverArgs, OptionalArgs = DriverOptionalArgs>,
 {
     ///
     /// 1. Populates a `source_cache`
