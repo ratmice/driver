@@ -255,11 +255,11 @@ mod tests {
         //
         // With this we can change both the `driver_init` implementation,
         // and the `DriverArgs`, or just change `driver_init`.
-        impl<X, DArgs, TArgs> Driver<X, DArgs, TArgs, ()>
+        impl<X, _DArgs_, _TArgs_> Driver<X, _DArgs_, _TArgs_, ()>
         where
             X: Tool,
-            DArgs: Into<Params<(), bool>>,
-            TArgs: Into<Params<X::RequiredArgs, X::OptionalArgs>>,
+            _DArgs_: Into<Params<(), bool>>,
+            _TArgs_: Into<Params<X::RequiredArgs, X::OptionalArgs>>,
         {
             pub fn driver_init<D: Diagnostics<X>>(
                 self,

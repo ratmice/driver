@@ -117,11 +117,11 @@ impl<'src> SourceCache<'src> {
 /// `driver_options` for itself, and `options` for the tool.
 ///
 /// Fields are public so that they are constructable by the caller.
-pub struct Driver<X, DArgs, TArgs, D: DriverSelector + DriverTypes<X> = DefaultDriver>
+pub struct Driver<X, _DArgs_, _TArgs_, D: DriverSelector + DriverTypes<X> = DefaultDriver>
 where
     X: Tool,
-    DArgs: Into<Params<D::RequiredArgs, D::OptionalArgs>>,
-    TArgs: Into<Params<X::RequiredArgs, X::OptionalArgs>>,
+    _DArgs_: Into<Params<D::RequiredArgs, D::OptionalArgs>>,
+    _TArgs_: Into<Params<X::RequiredArgs, X::OptionalArgs>>,
 {
     /// This is mostly here to guide inference, and generally would be a unitary type.
     pub tool: X,
@@ -129,16 +129,16 @@ where
     /// that we require a different driver implementation, or changes to driver_args.
     pub driver: D,
     /// Options that get handled by the driver.
-    pub driver_args: DArgs,
+    pub driver_args: _DArgs_,
     // Options specific to a `Tool`.
-    pub tool_args: TArgs,
+    pub tool_args: _TArgs_,
 }
 
-impl<X, DArgs, TArgs> Driver<X, DArgs, TArgs, DefaultDriver>
+impl<X, _DArgs_, _TArgs_> Driver<X, _DArgs_, _TArgs_, DefaultDriver>
 where
     X: Tool,
-    DArgs: Into<Params<DriverArgs, DriverOptionalArgs>>,
-    TArgs: Into<Params<X::RequiredArgs, X::OptionalArgs>>,
+    _DArgs_: Into<Params<DriverArgs, DriverOptionalArgs>>,
+    _TArgs_: Into<Params<X::RequiredArgs, X::OptionalArgs>>,
     DefaultDriver: DriverTypes<X>,
     // This bound is not needed, but perhaps informative.
     DefaultDriver:
