@@ -1,9 +1,9 @@
+pub use dir_view::DirView;
 /// I don't know how I feel about this, but it works.
 use std::io::Read as _;
 use std::sync::atomic::AtomicUsize;
 use std::{collections::HashMap, sync::atomic::Ordering};
 use std::{error, fmt, io, path};
-pub use dir_view::DirView;
 
 #[cfg(test)]
 mod test;
@@ -155,7 +155,7 @@ where
     ) -> Result<DriverOutput<X>, DriverError> {
         let mut driver_options = self.driver_args.into();
         let mut source_ids_from_driver = Vec::new();
-        let mut add_to_src_cache =|source_path, source| {
+        let mut add_to_src_cache = |source_path, source| {
             let source_id = SourceId(NEXT_SOURCE_ID.fetch_add(1, Ordering::SeqCst));
             source_cache.insert(source_id, (source_path, source));
             source_ids_from_driver.push(source_id);
