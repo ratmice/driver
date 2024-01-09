@@ -17,11 +17,10 @@ pub trait DriverSelector: _unstable_api_::InternalTrait {}
 /// `driver_options` for itself, and `options` for the tool.
 ///
 /// Fields are public so that they are constructable by the caller.
-pub struct Driver<X, _DArgs_, _TArgs_, D: DriverSelector + DriverTypes<X> = DefaultDriver>
-where
-    X: Tool,
-    _DArgs_: Into<Params<D::RequiredArgs, D::OptionalArgs>>,
-    _TArgs_: Into<Params<X::RequiredArgs, X::OptionalArgs>>,
+pub struct Driver<X, D = DefaultDriver>
+where X: Tool,
+D: DriverSelector + DriverTypes<X>
+
 {
     /// This is mostly here to guide inference, and generally would be a unitary type.
     pub tool: X,
@@ -29,16 +28,16 @@ where
     /// that we require a different driver implementation, or changes to driver_args.
     pub driver: D,
     /// Options that get handled by the driver.
-    pub driver_args: _DArgs_,
+    pub driver_args: (D::RequiredArgs, D::OptionalArgs),
     // Options specific to a `Tool`.
-    pub tool_args: _TArgs_,
+    pub tool_args: (X::RequiredArgs, X::OptionalArgs),
 }
 
-impl<X, _DArgs_, _TArgs_> Driver<X, _DArgs_, _TArgs_, DefaultDriver>
+impl<X> Driver<X, DefaultDriver>
 where
     X: Tool,
-    _DArgs_: Into<Params<DriverArgs, DriverOptionalArgs>>,
-    _TArgs_: Into<Params<X::RequiredArgs, X::OptionalArgs>>,
+    (<DefaultDriver as Args>::RequiredArgs, <DefaultDriver as Args>::OptionalArgs): Into<Params<DefaultDriver>>,
+    (X::RequiredArgs, X::OptionalArgs): Into<Params<X>>,
     DefaultDriver: DriverTypes<X>,
     // This bound is not needed, but perhaps informative.
     DefaultDriver:
@@ -53,7 +52,7 @@ where
         diagnostics: &mut D,
         source_cache: &mut HashMap<SourceId, (path::PathBuf, String)>,
     ) -> Result<DriverOutput<X>, DriverError> {
-        let mut driver_options = self.driver_args.into();
+        let mut driver_options: Params<DefaultDriver> = self.driver_args.into();
         let mut source_ids_from_driver = Vec::new();
         let mut add_to_src_cache = |source_path, source| {
             let source_id = SourceId(NEXT_SOURCE_ID.fetch_add(1, Ordering::SeqCst));

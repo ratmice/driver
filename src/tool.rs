@@ -23,7 +23,7 @@ where
     X: Tool,
 {
     fn tool_init<D: Diagnostics<X>>(
-        config: Params<X::RequiredArgs, X::OptionalArgs>,
+        config: Params<X>,
         source_cache: SourceCache<'_>,
         emitter: DiagnosticsEmitter<X, D>,
         session: &mut Session<X::SourceKind>,

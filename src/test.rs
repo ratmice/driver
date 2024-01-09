@@ -148,7 +148,7 @@ mod tests {
 
     impl ToolInit<Yacc> for GrammarASTWithValidationCertificate {
         fn tool_init<R: Diagnostics<Yacc>>(
-            options: Params<<Yacc as Args>::RequiredArgs, <Yacc as Args>::OptionalArgs>,
+            options: Params<Yacc>,
             source_cache: SourceCache<'_>,
             mut emitter: DiagnosticsEmitter<Yacc, R>,
             session: &mut Session<YaccSourceKind>,
@@ -265,11 +265,11 @@ mod tests {
         //
         // With this we can change both the `driver_init` implementation,
         // and the `DriverArgs`, or just change `driver_init`.
-        impl<X, _DArgs_, _TArgs_> Driver<X, _DArgs_, _TArgs_, ()>
+        impl<X> Driver<X, ()>
         where
             X: Tool,
-            _DArgs_: Into<Params<(), bool>>,
-            _TArgs_: Into<Params<X::RequiredArgs, X::OptionalArgs>>,
+            (<() as Args>::RequiredArgs, <() as Args>::OptionalArgs): Into<Params<()>>,
+            (X::RequiredArgs, X::OptionalArgs): Into<Params<X>>,
         {
             pub fn driver_init<D: Diagnostics<X>>(
                 self,
@@ -277,7 +277,7 @@ mod tests {
                 diagnostics: &mut D,
                 _extra_param: (),
             ) -> Result<X::Output, DriverError> {
-                let _driver_args: Params<(), bool> = self.driver_args.into();
+                let _driver_args: Params<()> = self.driver_args.into();
                 let emitter = DiagnosticsEmitter::new(self.tool, diagnostics);
                 let source_cache = SourceCache { source_cache };
                 let mut session = Session {
@@ -380,7 +380,7 @@ mod tests {
 
     impl ToolInit<Lex> for LexOutput {
         fn tool_init<'diag, 'src, D: Diagnostics<Lex>>(
-            _config: Params<(), ()>,
+            _config: Params<Lex>,
             _source_cache: SourceCache<'_>,
             _emitter: DiagnosticsEmitter<Lex, D>,
             _session: &mut Session<LexSourceKind>,

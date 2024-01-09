@@ -54,13 +54,13 @@ pub trait Spanned: fmt::Display {
     fn spanskind(&self) -> SpansKind;
 }
 /// A pair of required and optional parameters.
-pub struct Params<Required, Optional> {
-    pub required: Required,
-    pub optional: Optional,
+pub struct Params<X:Args> {
+    pub required: X::RequiredArgs,
+    pub optional: X::OptionalArgs,
 }
 
-impl<Required, Optional> From<(Required, Optional)> for Params<Required, Optional> {
-    fn from((required, optional): (Required, Optional)) -> Self {
+impl<X:Args> From<(X::RequiredArgs, X::OptionalArgs)> for Params<X> {
+    fn from((required, optional): (X::RequiredArgs, X::OptionalArgs)) -> Self {
         Self { required, optional }
     }
 }
