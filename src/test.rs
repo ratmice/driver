@@ -460,5 +460,6 @@ mod tests {
             #[allow(clippy::drop_non_drop)]
             drop(driver);
         }
+        assert_eq!(source_cache.len(), 2);
     }
 }
