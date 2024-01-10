@@ -1,5 +1,6 @@
 use crate::default_impls::SimpleDiagnostics;
-use std::{collections::HashMap, path};
+use std::{collections::HashMap, fmt, path};
+use dir_view::DirView;
 #[cfg(test)]
 mod tests {
     #![allow(dead_code)]

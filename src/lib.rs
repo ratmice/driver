@@ -1,9 +1,6 @@
-pub use dir_view::DirView;
+pub use dir_view;
 /// I don't know how I feel about this, but it works.
-//use std::io::Read as _;
 use std::sync::atomic::AtomicUsize;
-//use std::sync::atomic::Ordering;
-use std::fmt;
 
 mod default_impls;
 mod diagnostics;
@@ -11,11 +8,13 @@ mod driver;
 mod source;
 mod tool;
 
-pub use crate::diagnostics::{Diagnostics, DiagnosticsEmitter};
-pub use crate::source::{Session, SourceArtifact, SourceCache, SourceId};
-pub use default_impls::{DefaultDriver, DriverArgs, DriverOptionalArgs};
-pub use driver::{Driver, DriverError, DriverOutput, DriverSelector, DriverTypes};
-pub use tool::{Tool, ToolError, ToolInit};
+pub use {
+    crate::diagnostics::*,
+    crate::source::*,
+    crate::default_impls::*,
+    crate::driver::*,
+    crate::tool::*,
+};
 
 #[cfg(test)]
 mod test;
@@ -28,6 +27,7 @@ mod _unstable_api_ {
     pub struct InternalDefault;
 }
 
+/// Type bounds for `Driver`/`Tool` required and optional arguments.
 pub trait Args {
     /// A type for arguments that must be given.
     type RequiredArgs;
@@ -37,6 +37,8 @@ pub trait Args {
 
 pub(crate) static NEXT_SOURCE_ID: AtomicUsize = AtomicUsize::new(0);
 
+/// A `Span` records what portion of the user's input something (e.g. a lexeme or production)
+/// references (i.e. the `Span` doesn't hold a reference / copy of the actual input).
 #[derive(Debug)]
 #[allow(dead_code)]
 pub struct Span {
@@ -44,15 +46,25 @@ pub struct Span {
     end: usize,
 }
 
+/// Indicates how to interpret the spans of an error.
 pub enum SpansKind {
+    /// The first span is the first occurrence, and a span for each subsequent occurrence.
     DuplicationError,
+    /// Contains a single span at the site of the error.
     Error,
 }
-pub trait Spanned: fmt::Display {
-    // Required methods
+
+/// Implemented for errors and warnings to provide access to their spans.
+pub trait Spanned: std::fmt::Display {
+    /// Returns the spans associated with the error, always containing at least 1 span.
+    ///
+    /// Refer to [SpansKind] via [spanskind](Self::spanskind)
+    /// for the meaning and interpretation of spans and their ordering.
     fn spans(&self) -> &[Span];
+    /// Returns the `SpansKind` associated with this error.
     fn spanskind(&self) -> SpansKind;
 }
+
 /// A pair of required and optional parameters.
 pub struct Params<X: Args> {
     pub required: X::RequiredArgs,

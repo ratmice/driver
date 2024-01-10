@@ -4,6 +4,7 @@ use crate::source::{Session, SourceArtifact, SourceCache};
 use crate::{Args, Params, Spanned};
 use std::error;
 
+/// Tool specific types and their bounds.
 pub trait Tool: Args
 where
     Self: Sized + Copy,
@@ -14,10 +15,12 @@ where
     type Warning: SourceArtifact + Spanned;
     /// The type output by the tool.
     type Output: ToolInit<Self>;
+    /// A tool specific kind for source text
+    /// accessible from a session.
     type SourceKind;
 }
 
-/// Trait for constructing tool output.
+/// Trait for running a tool.
 pub trait ToolInit<X>
 where
     X: Tool,

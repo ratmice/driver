@@ -4,17 +4,32 @@ use std::{collections::HashMap, sync::atomic::Ordering};
 use crate::NEXT_SOURCE_ID;
 
 #[derive(PartialEq, Eq, Hash, Copy, Clone)]
-/// opaque ID for source strings:
+/// Opaque Id for source strings
 ///
 /// * A source string may have multiple SourceIDs.
-/// * A SourceID refers uniquely to a single source string.
+/// * A SourceId refers uniquely to a single source string.
 #[derive(Debug)]
 pub struct SourceId(pub(crate) usize);
 
+/// For obtaining a SourceId from an error.
 pub trait SourceArtifact {
     fn source_id(&self) -> SourceId;
 }
 
+/// A cache for source text.
+///
+/// This is a read/write cache that maps [SourceIds](SourceId) to
+/// a [Path](std::path::Path) and a [String] of source text. A file can have multiple
+/// entries in the cache by having multiple `SourceId`s.
+///
+/// It can be used as a store for sources loaded from disk, or the output
+/// of code generators, but does not perform or require any filesystem
+/// operations which are handled by [Driver](crate::Driver).
+///
+/// An instance where a it is useful to have a file with multiple `SourceId`s
+/// present in the source cache is when applying fixes based on error recovery.
+///
+/// Modifications to a `SourceCache` are tracked in a [Session].
 pub struct SourceCache<'a> {
     pub(crate) source_cache: &'a mut HashMap<SourceId, (std::path::PathBuf, String)>,
 }
@@ -48,20 +63,19 @@ impl<'src> SourceCache<'src> {
         source_id
     }
 }
+/// A session tracks changes to a `SourceCache`.
+///
+/// While `source_cache`, and `diagnostics` are allowed to
+/// persist across driver runs. `Session` is ephemeral.
+///
+/// Whenever `Driver` or a tool loads source text
+/// into a `SourceCache`, they track their changes here.
 pub struct Session<SourceKind> {
     pub(crate) source_ids_from_driver: Vec<SourceId>,
     pub(crate) source_ids_from_tool: Vec<SourceId>,
     pub(crate) source_kinds: HashMap<SourceId, SourceKind>,
 }
 
-/// A session is created during `driver_init`, and contains
-/// `SourceId`s for the documents loaded during driver init.
-///
-/// While `source_cache`, and `diagnostics` are allowed to
-/// persist across driver runs. `Session` is ephemeral.
-///
-/// This can be used to obtain the subset of the files asked to
-/// be loaded from the `source_cache`.
 impl<SourceKind> Session<SourceKind> {
     /// Any new source id's produced by the driver before running the tool.
     pub fn loaded_source_ids(&self) -> &[SourceId] {

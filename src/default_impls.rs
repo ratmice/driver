@@ -6,17 +6,17 @@ use crate::{
 };
 use dir_view::DirView;
 
-#[doc(hidden)]
+/// A [DriverSelector] for the default driver.
 pub struct DefaultDriver;
 
 impl _unstable_api_::InternalTrait for DefaultDriver {}
-/// Required options that are common to all drivers.
+/// Required options for a driver.
 pub struct DriverArgs {
     // There are not currently any required options for the tool.
 }
 
 #[derive(Default)]
-/// Optional arguments common to a driver.
+/// Optional arguments for a driver.
 pub struct DriverOptionalArgs {
     /// Gives an arbitrary string a name.
     pub named_string: Option<(std::path::PathBuf, String)>,
@@ -37,7 +37,7 @@ impl Args for DefaultDriver {
 }
 
 /// A Simple implementation of a `Diagnostics` trait.
-/// This was previously called a `Report`.
+/// It uses a vector as a backing store.
 pub struct SimpleDiagnostics<X: Tool> {
     warnings: Vec<X::Warning>,
     errors: Vec<X::Error>,

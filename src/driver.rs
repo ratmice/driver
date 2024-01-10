@@ -8,7 +8,7 @@ use crate::{
 };
 use std::{collections::HashMap, io, io::Read as _, path, sync::atomic::Ordering};
 
-#[doc(hidden)]
+/// A marker trait for selecting between drivers.
 pub trait DriverSelector: _unstable_api_::InternalTrait {}
 
 /// Used to configure and initialize a driver for a tool.
@@ -99,6 +99,9 @@ pub trait DriverTypes<X: Tool>: Args {
         T: Tool;
 }
 
+/// The return value of `driver_init`.
+///
+/// Contains a `Session`, and `Tool::Output`
 pub struct DriverOutput<X: Tool> {
     pub session: Session<X::SourceKind>,
     pub output: X::Output,
