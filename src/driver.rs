@@ -52,7 +52,7 @@ where
         let mut add_to_src_cache = |source_path, source| {
             let source_id = SourceId(NEXT_SOURCE_ID.fetch_add(1, Ordering::SeqCst));
             driver_env
-                .source_cache
+                .source_cache.cache
                 .insert(source_id, (source_path, source));
             source_ids_from_driver.push(source_id);
         };
@@ -66,9 +66,6 @@ where
             file.read_to_string(&mut source)?;
             add_to_src_cache(source_path, source);
         }
-
-        let mut source_cache = SourceCache::new();
-
         let emitter = DiagnosticsEmitter::new(self.tool, driver_env.diagnostics);
         let session = Session {
             source_ids_from_driver,
@@ -76,7 +73,7 @@ where
             source_kinds: HashMap::new(),
         };
         let mut tool_env = ToolInitEnv {
-            source_cache: &mut source_cache,
+            source_cache: driver_env.source_cache,
             emitter,
             session,
         };

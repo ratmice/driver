@@ -177,7 +177,7 @@ mod tests {
     #[test]
     fn it_works() {
         let mut diagnostics: SimpleDiagnostics<Yacc> = SimpleDiagnostics::default();
-        let mut source_cache = HashMap::new();
+        let mut source_cache = SourceCache::new();
         {
             let driver_env = DefaultDriverEnv {
                 source_cache: &mut source_cache,
@@ -217,7 +217,7 @@ mod tests {
     fn it_fails() {
         // These fields should perhaps be combined into something?
         let mut diagnostics = SimpleDiagnostics::default();
-        let mut source_cache = HashMap::new();
+        let mut source_cache = SourceCache::new();
 
         {
             let driver_env = DefaultDriverEnv {
@@ -267,7 +267,7 @@ mod tests {
         }
         // These fields should perhaps be combined into something?
         let mut diagnostics = SimpleDiagnostics::default();
-        let mut source_cache = HashMap::new();
+        let mut source_cache = SourceCache::new();
         // Note that the args here differ from those of the default `driver_init`.
         // Not for any reason, just to highlight that there can be multiple impls
         // for this struct due to the default type instace. The other being:
@@ -284,12 +284,11 @@ mod tests {
         {
             pub fn driver_init<D: Diagnostics<X>>(
                 self,
-                source_cache: &mut HashMap<SourceId, (path::PathBuf, String)>,
-                diagnostics: &mut D,
+                driver_env: DefaultDriverEnv<'_, X, D>,
                 _extra_param: (),
             ) -> Result<X::Output, DriverError> {
                 let _driver_args: Params<()> = self.driver_args.into();
-                let emitter = DiagnosticsEmitter::new(self.tool, diagnostics);
+                let emitter = DiagnosticsEmitter::new(self.tool, driver_env.diagnostics);
                 let mut source_cache = SourceCache::new();
                 let session: Session<X::SourceKind> = Session {
                     source_ids_from_driver: vec![],
@@ -306,6 +305,11 @@ mod tests {
         }
 
         {
+            let driver_env = DefaultDriverEnv {
+                source_cache: &mut source_cache,
+                diagnostics: &mut diagnostics,
+                tool: Yacc,
+            };
             // Just pass in `Yacc` to avoid Driver::<Yacc>`.
             let driver = Driver {
                 tool: Yacc,
@@ -318,7 +322,7 @@ mod tests {
                     Default::default(),
                 ),
             }
-            .driver_init(&mut source_cache, &mut diagnostics, ())
+            .driver_init(driver_env, ())
             .unwrap();
             let _ast = driver.ast();
             let _grm = driver.grammar().unwrap();
@@ -420,9 +424,14 @@ mod tests {
     #[test]
     fn lex_driver() {
         // These fields should perhaps be combined into something?
-        let mut source_cache = HashMap::new();
+        let mut source_cache = SourceCache::new();
         {
             let mut diagnostics = SimpleDiagnostics::default();
+            let driver_env = DefaultDriverEnv {
+                source_cache: &mut source_cache,
+                diagnostics: &mut diagnostics,
+                tool: Lex,
+            };
             // Just pass in `Yacc` to avoid Driver::<Yacc>`.
             let driver = Driver {
                 tool: Lex,
@@ -430,7 +439,7 @@ mod tests {
                 driver_args: ((), true),
                 tool_args: ((), ()),
             }
-            .driver_init(&mut source_cache, &mut diagnostics, ())
+            .driver_init(driver_env, ())
             .unwrap();
             #[allow(clippy::drop_non_drop)]
             drop(driver);
@@ -438,7 +447,7 @@ mod tests {
     }
     #[test]
     fn two_drivers_share_source_cache() {
-        let mut source_cache = HashMap::new();
+        let mut source_cache = SourceCache::new();
         {
             let mut diagnostics = SimpleDiagnostics::default();
             // Just pass in `Yacc` to avoid Driver::<Yacc>`.
@@ -495,6 +504,6 @@ mod tests {
             #[allow(clippy::drop_non_drop)]
             drop(driver);
         }
-        assert_eq!(source_cache.len(), 2);
+        assert_eq!(source_cache.source_ids().collect::<Vec<_>>().len(), 2);
     }
 }

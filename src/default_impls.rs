@@ -1,12 +1,11 @@
 use crate::{
     _unstable_api_,
     driver::{DriverOutput, DriverSelector, DriverTypes},
-    source::SourceId,
+    source::SourceCache,
     tool::Tool,
     Args,
 };
 use dir_view::DirView;
-use std::{collections::HashMap, path};
 
 /// A [DriverSelector] for the default driver.
 pub struct DefaultDriver;
@@ -40,7 +39,7 @@ where
     D: Diagnostics<X>,
 {
     pub diagnostics: &'a mut D,
-    pub source_cache: &'a mut HashMap<SourceId, (path::PathBuf, String)>,
+    pub source_cache: &'a mut SourceCache,
     pub tool: X,
 }
 

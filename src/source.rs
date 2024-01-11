@@ -31,26 +31,26 @@ pub trait SourceArtifact {
 ///
 /// Modifications to a `SourceCache` are tracked in a [Session].
 pub struct SourceCache {
-    pub(crate) source_cache: HashMap<SourceId, (std::path::PathBuf, String)>,
+    pub(crate) cache: HashMap<SourceId, (std::path::PathBuf, String)>,
 }
 
 impl SourceCache {
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Self {
-            source_cache: HashMap::new(),
+            cache: HashMap::new(),
         }
     }
     pub fn source_ids(&self) -> impl Iterator<Item = SourceId> + '_ {
-        self.source_cache.keys().copied()
+        self.cache.keys().copied()
     }
 
     pub fn source_for_id(&self, src_id: SourceId) -> Option<&str> {
-        self.source_cache.get(&src_id).map(|(_, src)| src.as_str())
+        self.cache.get(&src_id).map(|(_, src)| src.as_str())
     }
 
     pub fn path_for_id(&self, src_id: SourceId) -> Option<&path::Path> {
-        self.source_cache
+        self.cache
             .get(&src_id)
             .map(|(path, _)| path.as_path())
     }
@@ -64,7 +64,7 @@ impl SourceCache {
         kind: SourceKind,
     ) -> SourceId {
         let source_id = SourceId(NEXT_SOURCE_ID.fetch_add(1, Ordering::SeqCst));
-        self.source_cache.insert(source_id, (path, src));
+        self.cache.insert(source_id, (path, src));
         session.add_source_id(source_id, kind);
         source_id
     }
