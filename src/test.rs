@@ -290,14 +290,14 @@ mod tests {
             ) -> Result<X::Output, DriverError> {
                 let _driver_args: Params<()> = self.driver_args.into();
                 let emitter = DiagnosticsEmitter::new(self.tool, diagnostics);
-                let source_cache = SourceCache { source_cache };
+                let mut source_cache = SourceCache::new();
                 let session: Session<X::SourceKind> = Session {
                     source_ids_from_driver: vec![],
                     source_ids_from_tool: vec![],
                     source_kinds: HashMap::new(),
                 };
                 let mut tool_env = ToolInitEnv {
-                    source_cache,
+                    source_cache: &mut source_cache,
                     emitter,
                     session,
                 };

@@ -30,13 +30,19 @@ pub trait SourceArtifact {
 /// present in the source cache is when applying fixes based on error recovery.
 ///
 /// Modifications to a `SourceCache` are tracked in a [Session].
-pub struct SourceCache<'a> {
-    pub(crate) source_cache: &'a mut HashMap<SourceId, (std::path::PathBuf, String)>,
+pub struct SourceCache {
+    pub(crate) source_cache: HashMap<SourceId, (std::path::PathBuf, String)>,
 }
 
-impl<'src> SourceCache<'src> {
+impl SourceCache {
+    #[allow(clippy::new_without_default)]
+    pub fn new() -> Self {
+        Self {
+            source_cache: HashMap::new(),
+        }
+    }
     pub fn source_ids(&self) -> impl Iterator<Item = SourceId> + '_ {
-        self.source_cache.iter().map(|(src_id, _)| *src_id)
+        self.source_cache.keys().copied()
     }
 
     pub fn source_for_id(&self, src_id: SourceId) -> Option<&str> {

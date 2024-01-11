@@ -67,9 +67,7 @@ where
             add_to_src_cache(source_path, source);
         }
 
-        let source_cache = SourceCache {
-            source_cache: driver_env.source_cache,
-        };
+        let mut source_cache = SourceCache::new();
 
         let emitter = DiagnosticsEmitter::new(self.tool, driver_env.diagnostics);
         let session = Session {
@@ -78,7 +76,7 @@ where
             source_kinds: HashMap::new(),
         };
         let mut tool_env = ToolInitEnv {
-            source_cache,
+            source_cache: &mut source_cache,
             emitter,
             session,
         };
@@ -113,7 +111,7 @@ where
     D: Diagnostics<X>,
 {
     pub emitter: DiagnosticsEmitter<'a, X, D>,
-    pub source_cache: SourceCache<'a>,
+    pub source_cache: &'a mut SourceCache,
     pub session: Session<X::SourceKind>,
 }
 
