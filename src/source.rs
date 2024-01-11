@@ -13,7 +13,7 @@ pub struct SourceId(pub(crate) usize);
 
 /// For obtaining a SourceId from an error.
 pub trait SourceArtifact {
-    fn source_id(&self) -> SourceId;
+    fn source_id(&self) -> Option<SourceId>;
 }
 
 /// A cache for source text.

@@ -57,7 +57,7 @@ mod tests {
 
     #[derive(Debug)]
     struct YaccGrammarError {
-        source_id: SourceId,
+        source_id: Option<SourceId>,
         kind: YaccGrammarErrorKind,
     }
 
@@ -67,7 +67,7 @@ mod tests {
     }
 
     impl SourceArtifact for YaccGrammarError {
-        fn source_id(&self) -> SourceId {
+        fn source_id(&self) -> Option<SourceId> {
             self.source_id
         }
     }
@@ -98,11 +98,11 @@ mod tests {
     }
 
     struct YaccGrammarWarning {
-        source_id: SourceId,
+        source_id: Option<SourceId>,
         kind: YaccGrammarWarningKind,
     }
     impl SourceArtifact for YaccGrammarWarning {
-        fn source_id(&self) -> SourceId {
+        fn source_id(&self) -> Option<SourceId> {
             self.source_id
         }
     }
@@ -158,7 +158,7 @@ mod tests {
                 if let Some(path) = tool_env.source_cache.path_for_id(source_id) {
                     if path == path::PathBuf::from("Cargo.toml") {
                         tool_env.emitter.emit_non_fatal_error(YaccGrammarError {
-                            source_id,
+                            source_id: Some(source_id),
                             kind: YaccGrammarErrorKind::Testing(vec![]),
                         });
                     }
@@ -348,17 +348,17 @@ mod tests {
     #[derive(Debug)]
 
     struct LexError {
-        source_id: SourceId,
+        source_id: Option<SourceId>,
         kind: LexErrorKind,
     }
     impl Error for LexError {}
     impl SourceArtifact for NeverWarnings {
-        fn source_id(&self) -> SourceId {
+        fn source_id(&self) -> Option<SourceId> {
             unreachable!()
         }
     }
     impl SourceArtifact for LexError {
-        fn source_id(&self) -> SourceId {
+        fn source_id(&self) -> Option<SourceId> {
             self.source_id
         }
     }
