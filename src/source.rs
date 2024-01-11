@@ -50,9 +50,7 @@ impl SourceCache {
     }
 
     pub fn path_for_id(&self, src_id: SourceId) -> Option<&path::Path> {
-        self.cache
-            .get(&src_id)
-            .map(|(path, _)| path.as_path())
+        self.cache.get(&src_id).map(|(path, _)| path.as_path())
     }
 
     /// This should allow us to populate the source cache with generated code.

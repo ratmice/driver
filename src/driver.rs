@@ -52,7 +52,8 @@ where
         let mut add_to_src_cache = |source_path, source| {
             let source_id = SourceId(NEXT_SOURCE_ID.fetch_add(1, Ordering::SeqCst));
             driver_env
-                .source_cache.cache
+                .source_cache
+                .cache
                 .insert(source_id, (source_path, source));
             source_ids_from_driver.push(source_id);
         };
