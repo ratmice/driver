@@ -1,6 +1,7 @@
+use crate::default_impls::DefaultDriverEnv;
 use crate::default_impls::SimpleDiagnostics;
-use std::{collections::HashMap, fmt, path};
 use dir_view::DirView;
+use std::{collections::HashMap, fmt, path};
 #[cfg(test)]
 mod tests {
     #![allow(dead_code)]
@@ -150,15 +151,13 @@ mod tests {
     impl ToolInit<Yacc> for GrammarASTWithValidationCertificate {
         fn tool_init<R: Diagnostics<Yacc>>(
             options: Params<Yacc>,
-            source_cache: SourceCache<'_>,
-            mut emitter: DiagnosticsEmitter<Yacc, R>,
-            session: &mut Session<YaccSourceKind>,
+            tool_env: &mut ToolInitEnv<Yacc, R>,
         ) -> GrammarASTWithValidationCertificate {
-            let source_id = session.loaded_source_ids().first();
+            let source_id = tool_env.session.loaded_source_ids().first();
             if let Some(source_id) = source_id.copied() {
-                if let Some(path) = source_cache.path_for_id(source_id) {
+                if let Some(path) = tool_env.source_cache.path_for_id(source_id) {
                     if path == path::PathBuf::from("Cargo.toml") {
-                        emitter.emit_non_fatal_error(YaccGrammarError {
+                        tool_env.emitter.emit_non_fatal_error(YaccGrammarError {
                             source_id,
                             kind: YaccGrammarErrorKind::Testing(vec![]),
                         });
@@ -170,7 +169,7 @@ mod tests {
             // now at some time in the future.
             GrammarASTWithValidationCertificate {
                 ast: GrammarAST,
-                validation_success: !emitter.observed_error(),
+                validation_success: !tool_env.emitter.observed_error(),
             }
         }
     }
@@ -180,6 +179,11 @@ mod tests {
         let mut diagnostics: SimpleDiagnostics<Yacc> = SimpleDiagnostics::default();
         let mut source_cache = HashMap::new();
         {
+            let driver_env = DefaultDriverEnv {
+                source_cache: &mut source_cache,
+                diagnostics: &mut diagnostics,
+                tool: Yacc,
+            };
             // Just pass in `Yacc` to avoid Driver::<Yacc>`.
             let driver = Driver {
                 driver: DefaultDriver,
@@ -198,7 +202,7 @@ mod tests {
                     Default::default(),
                 ),
             }
-            .driver_init(&mut diagnostics, &mut source_cache)
+            .driver_init(driver_env)
             .unwrap();
             let _session = &driver.session;
             let _ast = driver.output.ast();
@@ -216,6 +220,11 @@ mod tests {
         let mut source_cache = HashMap::new();
 
         {
+            let driver_env = DefaultDriverEnv {
+                tool: Yacc,
+                diagnostics: &mut diagnostics,
+                source_cache: &mut source_cache,
+            };
             // Just pass in `Yacc` to avoid Driver::<Yacc>`.
             let driver = Driver {
                 tool: Yacc,
@@ -234,7 +243,7 @@ mod tests {
                     Default::default(),
                 ),
             }
-            .driver_init(&mut diagnostics, &mut source_cache)
+            .driver_init(driver_env)
             .unwrap();
             let _ast = driver.output.ast();
             let _grm = driver.output.grammar().unwrap();
@@ -254,6 +263,7 @@ mod tests {
 
         impl<X: Tool> DriverTypes<X> for () {
             type Output<T> = () where T: Tool;
+            type DriverEnv<'a, T, D> = () where T: Tool + 'a, D: Diagnostics<T> + 'a;
         }
         // These fields should perhaps be combined into something?
         let mut diagnostics = SimpleDiagnostics::default();
@@ -281,17 +291,17 @@ mod tests {
                 let _driver_args: Params<()> = self.driver_args.into();
                 let emitter = DiagnosticsEmitter::new(self.tool, diagnostics);
                 let source_cache = SourceCache { source_cache };
-                let mut session = Session {
+                let session: Session<X::SourceKind> = Session {
                     source_ids_from_driver: vec![],
                     source_ids_from_tool: vec![],
                     source_kinds: HashMap::new(),
                 };
-                Ok(X::Output::tool_init(
-                    self.tool_args.into(),
+                let mut tool_env = ToolInitEnv {
                     source_cache,
                     emitter,
-                    &mut session,
-                ))
+                    session,
+                };
+                Ok(X::Output::tool_init(self.tool_args.into(), &mut tool_env))
             }
         }
 
@@ -382,9 +392,7 @@ mod tests {
     impl ToolInit<Lex> for LexOutput {
         fn tool_init<'diag, 'src, D: Diagnostics<Lex>>(
             _config: Params<Lex>,
-            _source_cache: SourceCache<'_>,
-            _emitter: DiagnosticsEmitter<Lex, D>,
-            _session: &mut Session<LexSourceKind>,
+            _tool_env: &mut ToolInitEnv<Lex, D>,
         ) -> LexOutput {
             LexOutput {}
         }
@@ -446,7 +454,11 @@ mod tests {
                 ),
                 tool_args: ((), ()),
             }
-            .driver_init(&mut diagnostics, &mut source_cache)
+            .driver_init(DefaultDriverEnv {
+                source_cache: &mut source_cache,
+                diagnostics: &mut diagnostics,
+                tool: Lex,
+            })
             .unwrap();
             #[allow(clippy::drop_non_drop)]
             drop(driver);
@@ -472,7 +484,11 @@ mod tests {
                     Default::default(),
                 ),
             }
-            .driver_init(&mut diagnostics, &mut source_cache)
+            .driver_init(DefaultDriverEnv {
+                source_cache: &mut source_cache,
+                diagnostics: &mut diagnostics,
+                tool: Yacc,
+            })
             .unwrap();
             let _ast = driver.output.ast();
             let _grm = driver.output.grammar().unwrap();

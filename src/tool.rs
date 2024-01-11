@@ -1,5 +1,6 @@
-use crate::diagnostics::{Diagnostics, DiagnosticsEmitter};
-use crate::source::{Session, SourceArtifact, SourceCache};
+use crate::diagnostics::Diagnostics;
+use crate::source::SourceArtifact;
+use crate::driver::ToolInitEnv;
 
 use crate::{Args, Params, Spanned};
 use std::error;
@@ -27,9 +28,7 @@ where
 {
     fn tool_init<D: Diagnostics<X>>(
         config: Params<X>,
-        source_cache: SourceCache<'_>,
-        emitter: DiagnosticsEmitter<X, D>,
-        session: &mut Session<X::SourceKind>,
+        tool_env: &mut ToolInitEnv<X, D>,
     ) -> Self;
 }
 

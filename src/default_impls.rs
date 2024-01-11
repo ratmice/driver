@@ -1,10 +1,12 @@
 use crate::{
     _unstable_api_,
     driver::{DriverOutput, DriverSelector, DriverTypes},
+    source::SourceId,
     tool::Tool,
     Args,
 };
 use dir_view::DirView;
+use std::{collections::HashMap, path};
 
 /// A [DriverSelector] for the default driver.
 pub struct DefaultDriver;
@@ -29,6 +31,17 @@ pub struct DriverOptionalArgs {
 impl DriverSelector for DefaultDriver {}
 impl<X: Tool> DriverTypes<X> for DefaultDriver {
     type Output<T> = DriverOutput<T> where T: Tool;
+    type DriverEnv<'a, T, D> = DefaultDriverEnv<'a, T, D> where D: Diagnostics<T> + 'a, T: Tool + 'a;
+}
+
+pub struct DefaultDriverEnv<'a, X, D>
+where
+    X: Tool,
+    D: Diagnostics<X>,
+{
+    pub diagnostics: &'a mut D,
+    pub source_cache: &'a mut HashMap<SourceId, (path::PathBuf, String)>,
+    pub tool: X,
 }
 
 impl Args for DefaultDriver {

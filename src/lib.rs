@@ -9,10 +9,7 @@ mod source;
 mod tool;
 
 pub use {
-    crate::diagnostics::*,
-    crate::source::*,
-    crate::default_impls::*,
-    crate::driver::*,
+    crate::default_impls::*, crate::diagnostics::*, crate::driver::*, crate::source::*,
     crate::tool::*,
 };
 
