@@ -13,13 +13,13 @@ pub struct DefaultDriver;
 
 impl _unstable_api_::InternalTrait for DefaultDriver {}
 /// Required options for a driver.
-pub struct DriverArgs {
+pub struct DefaultDriverArgs {
     // There are not currently any required options for the tool.
 }
 
 #[derive(Default)]
 /// Optional arguments for a driver.
-pub struct DriverOptionalArgs {
+pub struct DefaultDriverOptionalArgs {
     /// Gives an arbitrary string a name.
     pub named_string: Option<(std::path::PathBuf, String)>,
     /// Takes an arbitrary `DirView`
@@ -45,8 +45,8 @@ where
 }
 
 impl Args for DefaultDriver {
-    type RequiredArgs = DriverArgs;
-    type OptionalArgs = DriverOptionalArgs;
+    type RequiredArgs = DefaultDriverArgs;
+    type OptionalArgs = DefaultDriverOptionalArgs;
 }
 
 /// A Simple implementation of a `Diagnostics` trait.

@@ -1,6 +1,6 @@
 use crate::diagnostics::Diagnostics;
-use crate::source::SourceArtifact;
 use crate::driver::ToolInitEnv;
+use crate::source::SourceArtifact;
 
 use crate::{Args, Params, Spanned};
 use std::error;
@@ -26,10 +26,7 @@ pub trait ToolInit<X>
 where
     X: Tool,
 {
-    fn tool_init<D: Diagnostics<X>>(
-        config: Params<X>,
-        tool_env: &mut ToolInitEnv<X, D>,
-    ) -> Self;
+    fn tool_init<D: Diagnostics<X>>(config: Params<X>, tool_env: &mut ToolInitEnv<X, D>) -> Self;
 }
 
 /// Errors have been emitted by the tool, that were observed by the driver.

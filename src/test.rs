@@ -189,8 +189,8 @@ mod tests {
                 driver: DefaultDriver,
                 tool: Yacc,
                 driver_args: (
-                    DriverArgs {},
-                    DriverOptionalArgs {
+                    DefaultDriverArgs {},
+                    DefaultDriverOptionalArgs {
                         read_source: Some(("Cargo.lock".into(), cwd_dir_view().unwrap())),
                         ..Default::default()
                     },
@@ -230,8 +230,8 @@ mod tests {
                 tool: Yacc,
                 driver: DefaultDriver,
                 driver_args: (
-                    DriverArgs {},
-                    DriverOptionalArgs {
+                    DefaultDriverArgs {},
+                    DefaultDriverOptionalArgs {
                         read_source: Some(("Cargo.toml".into(), cwd_dir_view().unwrap())),
                         ..Default::default()
                     },
@@ -446,8 +446,8 @@ mod tests {
                 tool: Lex,
                 driver: DefaultDriver,
                 driver_args: (
-                    DriverArgs {},
-                    DriverOptionalArgs {
+                    DefaultDriverArgs {},
+                    DefaultDriverOptionalArgs {
                         read_source: Some(("Cargo.lock".into(), cwd_dir_view().unwrap())),
                         ..Default::default()
                     },
@@ -471,8 +471,8 @@ mod tests {
                 tool: Yacc,
                 driver: DefaultDriver,
                 driver_args: (
-                    DriverArgs {},
-                    DriverOptionalArgs {
+                    DefaultDriverArgs {},
+                    DefaultDriverOptionalArgs {
                         read_source: Some(("Cargo.lock".into(), cwd_dir_view().unwrap())),
                         ..Default::default()
                     },

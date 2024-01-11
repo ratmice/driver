@@ -1,6 +1,6 @@
 use crate::{
     Args, Params, _unstable_api_,
-    default_impls::DefaultDriver,
+    default_impls::{DefaultDriver, DefaultDriverArgs, DefaultDriverOptionalArgs},
     diagnostics::{Diagnostics, DiagnosticsEmitter},
     source::{Session, SourceCache, SourceId},
     tool::{Tool, ToolInit},
@@ -36,15 +36,8 @@ where
 impl<X> Driver<X, DefaultDriver>
 where
     X: Tool,
-    (
-        <DefaultDriver as Args>::RequiredArgs,
-        <DefaultDriver as Args>::OptionalArgs,
-    ): Into<Params<DefaultDriver>>,
+    (DefaultDriverArgs, DefaultDriverOptionalArgs): Into<Params<DefaultDriver>>,
     (X::RequiredArgs, X::OptionalArgs): Into<Params<X>>,
-    DefaultDriver: DriverTypes<X>,
-    // This bound is implied, but perhaps informative.
-    // DefaultDriver:
-    //     DriverSelector + Args<RequiredArgs = DriverArgs, OptionalArgs = DriverOptionalArgs>,
 {
     ///
     /// 1. Populates a `source_cache`
