@@ -89,4 +89,22 @@ associated types.
 
 This is a basic overview of how it works without getting into too much detail.
 
+### Alleviating the downsides of required arguments
 
+One of the downsides of required arguments is that
+you cannot easily change them, or specialize them.
+So `Driver` is parameterized over two traits, one for itself
+and one for the `Tool` it is running. The one for itself
+allows it the set type of `Args` to be passed in where
+the `DefaultDriver` has associated type `DefaultDriver::RequiredArgs` and `DefaultDriver::OptionalArgs`.
+
+Because `init` is an `impl Driver<X: Tool, D: DriverTypes = DefaultDriver>` and not a trait.  We can then switch both the `init` function `driver_init`, *and*/*or* the set of `RequiredArgs`.  By switching out `DefaultDriver` for another type implementing `DriverTypes`.
+
+### Hard coding at the boundary
+
+The extra arguments passed in to `BarConfig::init` constructed from within `FooConfig::init` are possibly a problem for future compatibility.
+
+Since `Bar` is a trait and they all take a *specific* `FooStuff` parameter built by `init`, which does not vary for the implementation `Bar` or the implementation of `Foo`.
+
+This is undoubtedly the biggest risk in using this pattern,
+since even changing `DriverTypes` does not allow you to change `FooStuff`.  In `Driver` `FooStuff` is comprised of the structs `DriverEnv`, and `ToolInitEnv`.
