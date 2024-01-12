@@ -108,3 +108,6 @@ Since `Bar` is a trait and they all take a *specific* `FooStuff` parameter built
 
 This is undoubtedly the biggest risk in using this pattern,
 since even changing `DriverTypes` does not allow you to change `FooStuff`.  In `Driver` `FooStuff` is comprised of the structs `DriverEnv`, and `ToolInitEnv`.
+
+Of these, we can vary `DriverEnv` based on the `DriverTypes`.
+Some hiding of the representation of `ToolInitEnv` is possible. But the latter specifically needs to be carefully chosen, because it is passed as a parameter into a trait function.
