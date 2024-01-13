@@ -58,6 +58,7 @@ mod tests {
     #[derive(Debug)]
     struct YaccGrammarError {
         source_id: Option<SourceId>,
+        spans_kind: YaccGrammarSpansKind,
         kind: YaccGrammarErrorKind,
     }
 
@@ -72,15 +73,31 @@ mod tests {
         }
     }
 
+    #[derive(Debug)]
+    enum YaccGrammarSpansKind {
+        Duplicate,
+        Location,
+    }
+
     impl Spanned for YaccGrammarError {
+        type SpansKind = YaccGrammarSpansKind;
         fn spans(&self) -> &[Span] {
             match &self.kind {
                 YaccGrammarErrorKind::Testing(x) => x.as_slice(),
             }
         }
-        fn spanskind(&self) -> SpansKind {
+        fn spanskind(&self) -> Self::SpansKind {
             match &self.kind {
-                YaccGrammarErrorKind::Testing(_) => SpansKind::DuplicationError,
+                YaccGrammarErrorKind::Testing(_) => YaccGrammarSpansKind::Duplicate,
+            }
+        }
+        fn format_span(self, idx: usize) -> Option<impl fmt::Display> {
+            if idx == 0 {
+                return None;
+            }
+            match self.spans_kind {
+                YaccGrammarSpansKind::Duplicate => Some("Duplicate"),
+                YaccGrammarSpansKind::Location => None,
             }
         }
     }
@@ -111,15 +128,19 @@ mod tests {
     }
 
     impl Spanned for YaccGrammarWarning {
+        type SpansKind = YaccGrammarSpansKind;
         fn spans(&self) -> &[Span] {
             match &self.kind {
                 YaccGrammarWarningKind::Testing(x) => x,
             }
         }
-        fn spanskind(&self) -> SpansKind {
+        fn spanskind(&self) -> YaccGrammarSpansKind {
             match self.kind {
-                YaccGrammarWarningKind::Testing(_) => SpansKind::DuplicationError,
+                YaccGrammarWarningKind::Testing(_) => YaccGrammarSpansKind::Duplicate,
             }
+        }
+        fn format_span(self, _idx: usize) -> Option<impl fmt::Display> {
+            None::<&'_ str>
         }
     }
 
@@ -160,6 +181,7 @@ mod tests {
                         tool_env.emitter.emit_non_fatal_error(YaccGrammarError {
                             source_id: Some(source_id),
                             kind: YaccGrammarErrorKind::Testing(vec![]),
+                            spans_kind: YaccGrammarSpansKind::Location,
                         });
                     }
                 }
@@ -362,26 +384,40 @@ mod tests {
             self.source_id
         }
     }
+
+    enum LexSpansKind {
+        Location,
+    }
     impl Spanned for LexError {
+        type SpansKind = LexSpansKind;
+
         fn spans(&self) -> &[Span] {
             match &self.kind {
                 LexErrorKind::Testing(spans) => spans.as_slice(),
             }
         }
-        fn spanskind(&self) -> SpansKind {
+
+        fn spanskind(&self) -> Self::SpansKind {
             match self.kind {
-                LexErrorKind::Testing(_) => SpansKind::Error,
+                LexErrorKind::Testing(_) => Self::SpansKind::Location,
             }
+        }
+        fn format_span(self, _idx: usize) -> Option<impl fmt::Display> {
+            None::<&'_ str>
         }
     }
 
     impl Spanned for NeverWarnings {
+        type SpansKind = LexSpansKind;
         fn spans(&self) -> &[Span] {
             unreachable!()
         }
 
-        fn spanskind(&self) -> SpansKind {
+        fn spanskind(&self) -> Self::SpansKind {
             unreachable!()
+        }
+        fn format_span(self, _idx: usize) -> Option<impl fmt::Display> {
+            None::<&'_ str>
         }
     }
 

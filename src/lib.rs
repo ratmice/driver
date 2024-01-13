@@ -1,6 +1,6 @@
 pub use dir_view;
 /// I don't know how I feel about this, but it works.
-use std::sync::atomic::AtomicUsize;
+use std::{fmt, sync::atomic::AtomicUsize};
 
 mod default_impls;
 mod diagnostics;
@@ -43,23 +43,17 @@ pub struct Span {
     end: usize,
 }
 
-/// Indicates how to interpret the spans of an error.
-pub enum SpansKind {
-    /// The first span is the first occurrence, and a span for each subsequent occurrence.
-    DuplicationError,
-    /// Contains a single span at the site of the error.
-    Error,
-}
-
 /// Implemented for errors and warnings to provide access to their spans.
 pub trait Spanned: std::fmt::Display {
+    type SpansKind;
     /// Returns the spans associated with the error, always containing at least 1 span.
     ///
     /// Refer to [SpansKind] via [spanskind](Self::spanskind)
     /// for the meaning and interpretation of spans and their ordering.
     fn spans(&self) -> &[Span];
     /// Returns the `SpansKind` associated with this error.
-    fn spanskind(&self) -> SpansKind;
+    fn spanskind(&self) -> Self::SpansKind;
+    fn format_span(self, idx: usize) -> Option<impl fmt::Display>;
 }
 
 /// A pair of required and optional parameters.
