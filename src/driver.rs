@@ -14,9 +14,9 @@ pub trait DriverSelector: _unstable_api_::InternalTrait {}
 /// Used to configure and initialize a driver for a tool.
 ///
 /// Contains the tool to run which must implement `Tool`,
-/// `driver_options` for itself, and `options` for the tool.
+/// `driver_args` for itself, and `tool_args` for the tool.
 ///
-/// Fields are public so that they are constructable by the caller.
+/// Fields are public so that they may be constructed by the caller.
 pub struct Driver<X, D = DefaultDriver>
 where
     X: Tool,
@@ -27,9 +27,9 @@ where
     /// This is here to guide inference, and allow for future expansion, in the case
     /// that we require a different driver implementation, or changes to driver_args.
     pub driver: D,
-    /// Options that get handled by the driver.
+    /// Arguments that get handled by the driver.
     pub driver_args: (D::RequiredArgs, D::OptionalArgs),
-    // Options specific to a `Tool`.
+    /// Arguments specific to a `Tool`.
     pub tool_args: (X::RequiredArgs, X::OptionalArgs),
 }
 
@@ -41,7 +41,7 @@ where
 {
     ///
     /// 1. Populates a `source_cache`
-    /// 2. Constructes a `Diagnostics emitter`.
+    /// 2. Constructs a `Diagnostics emitter`.
     /// 3. Passes everything above to the tool's implementation of `tool_init`.
     pub fn driver_init<D: Diagnostics<X>>(
         self,
